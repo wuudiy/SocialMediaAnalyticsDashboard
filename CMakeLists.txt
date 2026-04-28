@@ -2,24 +2,48 @@ cmake_minimum_required(VERSION 3.16)
 
 project(SocialMediaAnalyticsDashboard VERSION 0.1 LANGUAGES CXX)
 
+# Qt 自动处理 .ui、Q_OBJECT、资源文件
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
-set(CMAKE_AUTOUIC_SEARCH_PATHS forms)
+# 告诉 AUTOUIC：.ui 文件在 forms 文件夹里
+set(CMAKE_AUTOUIC_SEARCH_PATHS
+    forms
+)
 
+# 使用 C++17
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets)
+# 这里必须加 Sql，否则后面 QSqlDatabase / MySQL 会链接失败
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets Sql)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Sql)
 
+# 项目所有源文件、头文件、ui 文件统一放这里
 set(PROJECT_SOURCES
-        main.cpp
+    main.cpp
 
-        views/mainwindow.cpp
-        views/mainwindow.h
-        forms/mainwindow.ui
+    controllers/AuthController.h
+    controllers/AuthController.cpp
+
+    models/User.h
+    models/User.cpp
+
+    services/DatabaseManager.h
+    services/DatabaseManager.cpp
+    services/UserRepository.h
+    services/UserRepository.cpp
+    services/DESUtil.h
+    services/DESUtil.cpp
+
+    views/LoginView.h
+    views/LoginView.cpp
+    views/mainwindow.h
+    views/mainwindow.cpp
+
+    forms/LoginForm.ui
+    forms/mainwindow.ui
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
@@ -27,17 +51,11 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         MANUAL_FINALIZATION
         ${PROJECT_SOURCES}
     )
-# Define target properties for Android with Qt 6 as:
-#    set_property(TARGET SocialMediaAnalyticsDashboard APPEND PROPERTY QT_ANDROID_PACKAGE_SOURCE_DIR
-#                 ${CMAKE_CURRENT_SOURCE_DIR}/android)
-# For more information, see https://doc.qt.io/qt-6/qt-add-executable.html#target-creation
 else()
     if(ANDROID)
         add_library(SocialMediaAnalyticsDashboard SHARED
             ${PROJECT_SOURCES}
         )
-# Define properties for Android with Qt 5 after find_package() calls as:
-#    set(ANDROID_PACKAGE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/android")
     else()
         add_executable(SocialMediaAnalyticsDashboard
             ${PROJECT_SOURCES}
@@ -45,14 +63,27 @@ else()
     endif()
 endif()
 
-target_link_libraries(SocialMediaAnalyticsDashboard PRIVATE Qt${QT_VERSION_MAJOR}::Widgets)
+# 链接 Qt Widgets 和 Qt Sql
+target_link_libraries(SocialMediaAnalyticsDashboard
+    PRIVATE
+    Qt${QT_VERSION_MAJOR}::Widgets
+    Qt${QT_VERSION_MAJOR}::Sql
+)
 
-# Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.
-# If you are developing for iOS or macOS you should consider setting an
-# explicit, fixed bundle identifier manually though.
+# 让 include 更方便
+target_include_directories(SocialMediaAnalyticsDashboard PRIVATE
+    views
+    models
+    controllers
+    services
+    forms
+)
+
+# Qt bundle 设置，保留你原来的结构
 if(${QT_VERSION} VERSION_LESS 6.1.0)
-  set(BUNDLE_ID_OPTION MACOSX_BUNDLE_GUI_IDENTIFIER com.example.SocialMediaAnalyticsDashboard)
+    set(BUNDLE_ID_OPTION MACOSX_BUNDLE_GUI_IDENTIFIER com.example.SocialMediaAnalyticsDashboard)
 endif()
+
 set_target_properties(SocialMediaAnalyticsDashboard PROPERTIES
     ${BUNDLE_ID_OPTION}
     MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
@@ -62,6 +93,7 @@ set_target_properties(SocialMediaAnalyticsDashboard PROPERTIES
 )
 
 include(GNUInstallDirs)
+
 install(TARGETS SocialMediaAnalyticsDashboard
     BUNDLE DESTINATION .
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
@@ -71,11 +103,3 @@ install(TARGETS SocialMediaAnalyticsDashboard
 if(QT_VERSION_MAJOR EQUAL 6)
     qt_finalize_executable(SocialMediaAnalyticsDashboard)
 endif()
-
-target_include_directories(SocialMediaAnalyticsDashboard PRIVATE
-    views
-    models
-    controllers
-    services
-)
-

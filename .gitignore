@@ -82,3 +82,10 @@ CMakeLists.txt.user*
 .uic/
 /build*/
 /.qtcreator/
+
+# Qt Creator local user settings
+.qtcreator/
+*.user
+
+# Build output
+build/
