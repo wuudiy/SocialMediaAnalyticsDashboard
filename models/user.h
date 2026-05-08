@@ -25,8 +25,8 @@ public:
 
 public:
     int userId;          // 用户 ID，对应 users.user_id
-    QString username;    // 用户名，数据库中保存密文
-    QString password;    // 密码，数据库中保存密文
+    QString username;    // 用户名，数据库中保存 DES 密文
+    QString password;    // 密码，数据库中保存 SHA-256 哈希
     QString role;        // 用户角色：admin 或 user
     QString status;      // 账号状态：active 或 disabled
 };

@@ -1,5 +1,6 @@
 #include "databasemanager.h"
 #include "desutil.h"
+#include "sha256util.h"
 
 #include <QDebug>
 #include <QSqlError>
@@ -139,7 +140,7 @@ bool DatabaseManager::createDefaultAdmin()
         QString::fromUtf8(kDefaultAdminUsername)
         );
 
-    const QString encryptedPassword = DESUtil::encrypt(
+    const QString passwordHash = SHA256Util::hashPassword(
         QString::fromUtf8(kDefaultAdminPassword)
         );
 
@@ -179,7 +180,7 @@ bool DatabaseManager::createDefaultAdmin()
         );
 
     insertQuery.bindValue(QStringLiteral(":username"), encryptedUsername);
-    insertQuery.bindValue(QStringLiteral(":password"), encryptedPassword);
+    insertQuery.bindValue(QStringLiteral(":password"), passwordHash);
     insertQuery.bindValue(QStringLiteral(":role"), QString::fromUtf8(kDefaultAdminRole));
     insertQuery.bindValue(QStringLiteral(":status"), QString::fromUtf8(kDefaultAdminStatus));
 

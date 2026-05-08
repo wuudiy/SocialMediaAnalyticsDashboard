@@ -1,8 +1,8 @@
 #ifndef AUTHCONTROLLER_H
 #define AUTHCONTROLLER_H
 
-#include "../models/User.h"
-#include "../services/UserRepository.h"
+#include "../models/user.h"
+#include "../services/userrepository.h"
 
 #include <QString>
 
@@ -57,6 +57,10 @@ private:
 
     // 创建用户权限判断。
     bool canCreateUser(const User& operatorUser) const;
+
+    // 校验密码。新密码走 SHA-256，旧 DES 密码登录成功后自动升级。
+    bool verifyPasswordAndUpgradeIfNeeded(const User& userFromDatabase,
+                                          const QString& password);
 
 private:
     UserRepository userRepository;

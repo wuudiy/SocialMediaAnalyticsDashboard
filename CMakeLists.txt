@@ -34,6 +34,8 @@ set(PROJECT_SOURCES
     services/databasemanager.cpp
     services/desutil.h
     services/desutil.cpp
+    services/sha256util.h
+    services/sha256util.cpp
     services/userrepository.h
     services/userrepository.cpp
 
@@ -54,6 +56,7 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
     qt_add_executable(${PROJECT_NAME}
         MANUAL_FINALIZATION
         ${PROJECT_SOURCES}
+        services/sha256util.h services/sha256util.cpp
     )
 else()
     add_executable(${PROJECT_NAME}

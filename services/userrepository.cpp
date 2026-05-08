@@ -1,6 +1,6 @@
-#include "UserRepository.h"
-#include "DatabaseManager.h"
-#include "DESUtil.h"
+#include "userrepository.h"
+#include "databasemanager.h"
+#include "desutil.h"
 
 #include <QDebug>
 #include <QSqlError>
@@ -62,7 +62,7 @@ bool UserRepository::usernameExists(const QString& username)
 
 // 插入新用户。用户名在 Repository 内部加密，调用方不用关心数据库存储细节。
 bool UserRepository::insertUser(const QString& username,
-                                const QString& encryptedPassword,
+                                const QString& passwordHash,
                                 const QString& role,
                                 const QString& status)
 {
@@ -74,12 +74,35 @@ bool UserRepository::insertUser(const QString& username,
         );
 
     query.bindValue(":username", encryptUsername(username));
-    query.bindValue(":password", encryptedPassword);
+    query.bindValue(":password", passwordHash);
     query.bindValue(":role", role);
     query.bindValue(":status", status);
 
     if (!query.exec()) {
         qDebug() << "Insert user failed:" << query.lastError().text();
+        return false;
+    }
+
+    return true;
+}
+
+// 更新用户密码。旧 DES 密码登录成功后会被替换成 SHA-256 哈希。
+bool UserRepository::updatePasswordByUserId(int userId,
+                                            const QString& passwordHash)
+{
+    QSqlQuery query(DatabaseManager::database());
+
+    query.prepare(
+        "UPDATE users "
+        "SET password = :password "
+        "WHERE user_id = :user_id"
+        );
+
+    query.bindValue(":password", passwordHash);
+    query.bindValue(":user_id", userId);
+
+    if (!query.exec()) {
+        qDebug() << "Update password failed:" << query.lastError().text();
         return false;
     }
 

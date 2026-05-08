@@ -1,17 +1,22 @@
-#include "AuthController.h"
-#include "../services/DESUtil.h"
+#include "authcontroller.h"
+#include "../services/desutil.h"
+#include "../services/sha256util.h"
+
+#include <QDebug>
 
 AuthController::AuthController()
 {
 }
+
 /*
  * 登录流程：
  * 1. 校验输入；
  * 2. 根据用户名查询用户；
  * 3. 检查用户是否存在；
  * 4. 检查账号是否启用；
- * 5. 解密密码并比对；
- * 6. 保存当前用户。
+ * 5. 使用 SHA-256 校验密码；
+ * 6. 如果是旧 DES 密码，登录成功后自动升级成 SHA-256；
+ * 7. 保存当前用户。
  */
 
 // 登录用户：校验输入、查询用户、检查状态、比对密码。
@@ -38,9 +43,7 @@ bool AuthController::loginUser(const QString& username,
         return false;
     }
 
-    const QString realPassword = DESUtil::decrypt(userFromDatabase.password);
-
-    if (realPassword != trimmedPassword) {
+    if (!verifyPasswordAndUpgradeIfNeeded(userFromDatabase, trimmedPassword)) {
         message = "Incorrect password.";
         return false;
     }
@@ -49,6 +52,9 @@ bool AuthController::loginUser(const QString& username,
 
     // 数据库里 username 是密文，登录成功后转成明文供界面显示。
     currentUser.username = DESUtil::decrypt(userFromDatabase.username);
+
+    // 登录成功后，当前用户对象中也统一保存 SHA-256 哈希。
+    currentUser.password = SHA256Util::hashPassword(trimmedPassword);
 
     message = "Login successful.";
     return true;
@@ -82,11 +88,11 @@ bool AuthController::registerUser(const User& operatorUser,
         return false;
     }
 
-    const QString encryptedPassword = DESUtil::encrypt(trimmedPassword);
+    const QString passwordHash = SHA256Util::hashPassword(trimmedPassword);
 
     const bool inserted = userRepository.insertUser(
         trimmedUsername,
-        encryptedPassword,
+        passwordHash,
         normalizedRole,
         QStringLiteral("active")
         );
@@ -175,3 +181,39 @@ bool AuthController::canCreateUser(const User& operatorUser) const
     return operatorUser.isValid() && operatorUser.isActive() && operatorUser.isAdmin();
 }
 
+/*
+ * 校验密码并升级旧数据
+ * ----------------
+ * 处理流程：
+ * 1. 如果数据库中已经是 SHA-256 哈希，直接计算并比对；
+ * 2. 如果数据库中还是旧 DES 密文，先按旧逻辑解密比对；
+ * 3. 旧密码比对成功后，立即更新成 SHA-256 哈希；
+ * 4. 后续登录就不再走 DES 密码逻辑。
+ */
+bool AuthController::verifyPasswordAndUpgradeIfNeeded(const User& userFromDatabase,
+                                                      const QString& password)
+{
+    const QString storedPassword = userFromDatabase.password.trimmed();
+
+    if (SHA256Util::isSha256Hash(storedPassword)) {
+        return SHA256Util::verifyPassword(password, storedPassword);
+    }
+
+    const QString legacyPassword = DESUtil::decrypt(storedPassword);
+
+    if (legacyPassword != password) {
+        return false;
+    }
+
+    const QString passwordHash = SHA256Util::hashPassword(password);
+    const bool upgraded = userRepository.updatePasswordByUserId(
+        userFromDatabase.userId,
+        passwordHash
+        );
+
+    if (!upgraded) {
+        qDebug() << "Password verified, but upgrade to SHA-256 failed.";
+    }
+
+    return true;
+}
