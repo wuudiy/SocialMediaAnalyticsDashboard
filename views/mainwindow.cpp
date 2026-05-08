@@ -8,6 +8,7 @@
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QList>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QStackedWidget>
@@ -46,6 +47,7 @@ MainWindow::~MainWindow()
     delete ui;
 }
 
+// 设置当前登录用户，并把用户信息同步给主界面和子页面。
 void MainWindow::setCurrentUser(const User& user)
 {
     currentUser = user;
@@ -72,9 +74,11 @@ void MainWindow::setCurrentUser(const User& user)
         );
 }
 
+// 搭建主界面：左侧导航 + 顶部栏 + 中间页面容器。
 void MainWindow::buildUi()
 {
     auto *rootWidget = new QWidget(this);
+
     auto *rootLayout = new QHBoxLayout(rootWidget);
     rootLayout->setContentsMargins(0, 0, 0, 0);
     rootLayout->setSpacing(0);
@@ -93,11 +97,14 @@ void MainWindow::buildUi()
     pageStack = new QStackedWidget(mainArea);
 
     dashboardPage = new DashboardPage(pageStack);
+
     analyticsPage = createPlaceholderPage(
         QStringLiteral("Analytics"),
         QStringLiteral("Trend analysis, platform comparison and advanced metrics will be placed here.")
         );
+
     userManagementPage = new UserManagementPage(pageStack);
+
     settingsPage = createPlaceholderPage(
         QStringLiteral("Settings"),
         QStringLiteral("System preferences, database settings and profile options will be placed here.")
@@ -109,11 +116,16 @@ void MainWindow::buildUi()
     pageStack->addWidget(settingsPage);
 
     mainLayout->addWidget(pageStack, 1);
-
     rootLayout->addWidget(mainArea, 1);
 
     setCentralWidget(rootWidget);
 
+    applyStyleSheet();
+}
+
+// 集中管理主窗口样式，避免布局代码里混入大段 QSS。
+void MainWindow::applyStyleSheet()
+{
     setStyleSheet(
         "QWidget#sideBar {"
         "    background: #111827;"
@@ -125,6 +137,7 @@ void MainWindow::buildUi()
         "    background: #FFFFFF;"
         "    border-bottom: 1px solid #E5E7EB;"
         "}"
+
         "QLabel#appName {"
         "    color: #FFFFFF;"
         "    font-size: 18px;"
@@ -143,6 +156,7 @@ void MainWindow::buildUi()
         "    color: #374151;"
         "    font-size: 13px;"
         "}"
+
         "QPushButton#navButton {"
         "    color: #D1D5DB;"
         "    background: transparent;"
@@ -176,6 +190,7 @@ void MainWindow::buildUi()
         "QPushButton#logoutButton:hover {"
         "    background: #E5E7EB;"
         "}"
+
         "QFrame#placeholderCard {"
         "    background: #FFFFFF;"
         "    border: 1px solid #E5E7EB;"
@@ -193,6 +208,7 @@ void MainWindow::buildUi()
         );
 }
 
+// 构建左侧导航栏：应用标题、菜单按钮、页面切换信号。
 QWidget* MainWindow::createSideBar()
 {
     auto *sideBar = new QWidget();
@@ -239,6 +255,7 @@ QWidget* MainWindow::createSideBar()
     return sideBar;
 }
 
+// 构建顶部栏：当前页面标题、当前登录用户、退出按钮。
 QWidget* MainWindow::createTopBar()
 {
     auto *topBar = new QWidget();
@@ -257,6 +274,7 @@ QWidget* MainWindow::createTopBar()
 
     logoutButton = new QPushButton(QStringLiteral("Logout"));
     logoutButton->setObjectName(QStringLiteral("logoutButton"));
+    logoutButton->setCursor(Qt::PointingHandCursor);
 
     layout->addWidget(pageTitleLabel);
     layout->addStretch();
@@ -269,10 +287,12 @@ QWidget* MainWindow::createTopBar()
     return topBar;
 }
 
+// 创建占位页：用于暂未实现的 Analytics 和 Settings 模块。
 QWidget* MainWindow::createPlaceholderPage(const QString& title,
                                            const QString& description)
 {
     auto *page = new QWidget();
+
     auto *layout = new QVBoxLayout(page);
     layout->setContentsMargins(24, 22, 24, 24);
 
@@ -301,52 +321,82 @@ QWidget* MainWindow::createPlaceholderPage(const QString& title,
     return page;
 }
 
+// 创建统一样式的左侧导航按钮。
 QPushButton* MainWindow::createNavButton(const QString& text)
 {
     auto *button = new QPushButton(text);
     button->setObjectName(QStringLiteral("navButton"));
     button->setCursor(Qt::PointingHandCursor);
     button->setMinimumHeight(42);
+
     return button;
 }
 
+// 切换到 Dashboard 页面。
 void MainWindow::showDashboardPage()
 {
-    pageStack->setCurrentWidget(dashboardPage);
-    pageTitleLabel->setText(QStringLiteral("Dashboard"));
-    setActiveNavButton(dashboardButton);
+    navigateTo(
+        dashboardPage,
+        QStringLiteral("Dashboard"),
+        dashboardButton
+        );
 }
 
+// 切换到 Analytics 页面。
 void MainWindow::showAnalyticsPage()
 {
-    pageStack->setCurrentWidget(analyticsPage);
-    pageTitleLabel->setText(QStringLiteral("Analytics"));
-    setActiveNavButton(analyticsButton);
+    navigateTo(
+        analyticsPage,
+        QStringLiteral("Analytics"),
+        analyticsButton
+        );
 }
 
+// 切换到用户管理页面，进入前先做管理员权限检查。
 void MainWindow::showUserManagementPage()
 {
-    if (currentUser.role != QStringLiteral("admin")) {
+    if (!isAdminUser()) {
         QMessageBox::warning(
             this,
             QStringLiteral("Access Denied"),
             QStringLiteral("Only admin users can open User Management.")
             );
+
         return;
     }
 
-    pageStack->setCurrentWidget(userManagementPage);
-    pageTitleLabel->setText(QStringLiteral("User Management"));
-    setActiveNavButton(userManagementButton);
+    navigateTo(
+        userManagementPage,
+        QStringLiteral("User Management"),
+        userManagementButton
+        );
 }
 
+// 切换到 Settings 页面。
 void MainWindow::showSettingsPage()
 {
-    pageStack->setCurrentWidget(settingsPage);
-    pageTitleLabel->setText(QStringLiteral("Settings"));
-    setActiveNavButton(settingsButton);
+    navigateTo(
+        settingsPage,
+        QStringLiteral("Settings"),
+        settingsButton
+        );
 }
 
+// 统一处理页面跳转，避免每个 showXXXPage 重复三段相同代码。
+void MainWindow::navigateTo(QWidget *page,
+                            const QString& title,
+                            QPushButton *activeButton)
+{
+    if (!page || !pageStack) {
+        return;
+    }
+
+    pageStack->setCurrentWidget(page);
+    pageTitleLabel->setText(title);
+    setActiveNavButton(activeButton);
+}
+
+// 退出程序前二次确认，避免用户误点。
 void MainWindow::exitApplication()
 {
     const QMessageBox::StandardButton answer = QMessageBox::question(
@@ -360,6 +410,7 @@ void MainWindow::exitApplication()
     }
 }
 
+// 刷新左侧导航高亮状态。
 void MainWindow::setActiveNavButton(QPushButton *activeButton)
 {
     const QList<QPushButton*> buttons = {
@@ -374,22 +425,36 @@ void MainWindow::setActiveNavButton(QPushButton *activeButton)
             continue;
         }
 
-        button->setObjectName(button == activeButton
-                                  ? QStringLiteral("activeNavButton")
-                                  : QStringLiteral("navButton"));
+        const bool isActive = (button == activeButton);
 
+        button->setObjectName(
+            isActive
+                ? QStringLiteral("activeNavButton")
+                : QStringLiteral("navButton")
+            );
+
+        // objectName 改变后手动刷新 QSS，否则高亮样式可能不会立即生效。
         button->style()->unpolish(button);
         button->style()->polish(button);
+        button->update();
     }
 }
 
+// 根据当前用户角色刷新主界面可用入口。
 void MainWindow::updateRoleAccess()
 {
-    const bool isAdmin = (currentUser.role == QStringLiteral("admin"));
+    const bool canManageUsers = isAdminUser();
 
-    userManagementButton->setVisible(isAdmin);
+    userManagementButton->setVisible(canManageUsers);
 
-    if (!isAdmin && pageStack->currentWidget() == userManagementPage) {
+    // 防止普通用户因为后续代码跳转而停留在用户管理页。
+    if (!canManageUsers && pageStack->currentWidget() == userManagementPage) {
         showDashboardPage();
     }
+}
+
+// 管理员判断统一收口，避免到处直接比较 role 字符串。
+bool MainWindow::isAdminUser() const
+{
+    return currentUser.isValid() && currentUser.isAdmin();
 }

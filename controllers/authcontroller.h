@@ -1,4 +1,4 @@
-    #ifndef AUTHCONTROLLER_H
+#ifndef AUTHCONTROLLER_H
 #define AUTHCONTROLLER_H
 
 #include "../models/User.h"
@@ -6,44 +6,61 @@
 
 #include <QString>
 
-
- //Controller层：AuthController
- //作用：
- //1. 处理登录请求；
- //2. 检查用户输入；
- //3. 调用 UserRepository 查询用户；
- //4. 调用 DESUtil 解密密码；
- //5. 判断登录是否成功；
- //6. 保存当前登录用户。
- //View 不直接访问数据库；
- //View 只调用 AuthController。
-
+/*
+ * 登录注册业务控制器。
+ *
+ * 负责：
+ * - 登录流程；
+ * - 注册流程；
+ * - 输入校验；
+ * - 当前登录用户状态维护。
+ *
+ * 不负责：
+ * - 直接写 SQL；
+ * - 创建界面控件；
+ * - 管理数据库连接。
+ */
 class AuthController
 {
 public:
     AuthController();
 
-    //登录验证，message 用于返回错误信息或成功信息
+    // 用户登录，message 返回给界面显示。
     bool loginUser(const QString& username,
                    const QString& password,
                    QString& message);
 
-    // 注册新用户。operatorUser 是当前登录的人，用来判断有没有管理员权限。
+    // 管理员创建新用户，operatorUser 是当前操作人。
     bool registerUser(const User& operatorUser,
                       const QString& username,
                       const QString& password,
                       const QString& role,
                       QString& message);
 
-    //获取当前用户角色
+    // 返回当前登录用户角色。
     QString getCurrentUserRole() const;
 
-    //获取当前登录用户
+    // 返回当前登录用户完整信息。
     User getCurrentUser() const;
 
 private:
-    UserRepository userRepository;  //用于访问 users 表
-    User currentUser;               //保存当前登录成功的用户
+    // 登录输入校验。
+    bool validateLoginInput(const QString& username,
+                            const QString& password,
+                            QString& message) const;
+
+    // 注册输入校验。
+    bool validateRegisterInput(const QString& username,
+                               const QString& password,
+                               const QString& role,
+                               QString& message) const;
+
+    // 创建用户权限判断。
+    bool canCreateUser(const User& operatorUser) const;
+
+private:
+    UserRepository userRepository;
+    User currentUser;
 };
 
 #endif // AUTHCONTROLLER_H

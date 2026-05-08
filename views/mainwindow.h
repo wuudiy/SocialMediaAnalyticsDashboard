@@ -1,9 +1,9 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
+#include "../models/user.h"
+
 #include <QMainWindow>
-#include "../models/User.h"
-#include "../controllers/authcontroller.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -18,13 +18,20 @@ class QLabel;
 class QPushButton;
 class QStackedWidget;
 class QWidget;
+
 /*
- * View 层：MainWindow
- * -------------------
- * 作用：
- * 1. 登录成功后的系统主窗口；
- * 2. 接收当前登录用户；
- * 3. 根据用户角色决定显示管理员功能还是普通用户功能。
+ * 登录后的主界面。
+ *
+ * 负责：
+ * - 创建主窗口布局；
+ * - 管理左侧导航；
+ * - 管理页面切换；
+ * - 根据当前用户角色控制功能入口。
+ *
+ * 不负责：
+ * - 登录注册逻辑；
+ * - 数据库读写；
+ * - 各页面自己的业务处理。
  */
 class MainWindow : public QMainWindow
 {
@@ -34,7 +41,7 @@ public:
     explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
 
-    // 登录成功后，由 main.cpp 调用，把当前用户传入主窗口
+    // 登录成功后设置当前用户，并刷新界面权限。
     void setCurrentUser(const User& user);
 
 private slots:
@@ -45,15 +52,38 @@ private slots:
     void exitApplication();
 
 private:
+    // 主界面初始化。
     void buildUi();
+
+    // 当前窗口的统一样式。
+    void applyStyleSheet();
+
+    // 左侧导航栏。
     QWidget* createSideBar();
+
+    // 顶部标题栏。
     QWidget* createTopBar();
+
+    // 未完成模块的占位页面。
     QWidget* createPlaceholderPage(const QString& title,
                                    const QString& description);
 
+    // 创建统一风格的导航按钮。
     QPushButton* createNavButton(const QString& text);
+
+    // 统一页面跳转：切页面、改标题、刷新导航高亮。
+    void navigateTo(QWidget *page,
+                    const QString& title,
+                    QPushButton *activeButton);
+
+    // 设置当前选中的导航按钮。
     void setActiveNavButton(QPushButton *activeButton);
+
+    // 根据角色刷新可见功能入口。
     void updateRoleAccess();
+
+    // 当前用户是否为管理员。
+    bool isAdminUser() const;
 
 private:
     Ui::MainWindow *ui;
@@ -77,5 +107,4 @@ private:
     QWidget *settingsPage;
 };
 
-#endif
- // MAINWINDOW_H
+#endif // MAINWINDOW_H

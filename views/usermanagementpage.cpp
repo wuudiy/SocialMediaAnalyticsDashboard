@@ -22,12 +22,14 @@ UserManagementPage::UserManagementPage(QWidget *parent)
     buildUi();
 }
 
+// 接收当前登录用户，并立即刷新页面权限。
 void UserManagementPage::setCurrentUser(const User& user)
 {
     currentUser = user;
     updateAccessState();
 }
 
+// 创建页面结构：标题说明 + 新增用户表单卡片。
 void UserManagementPage::buildUi()
 {
     auto *rootLayout = new QVBoxLayout(this);
@@ -42,56 +44,19 @@ void UserManagementPage::buildUi()
 
     rootLayout->addWidget(titleLabel);
     rootLayout->addWidget(tipLabel);
-
-    auto *card = new QFrame();
-    card->setObjectName(QStringLiteral("card"));
-    card->setMaximumWidth(560);
-
-    auto *formLayout = new QGridLayout(card);
-    formLayout->setContentsMargins(22, 22, 22, 22);
-    formLayout->setHorizontalSpacing(14);
-    formLayout->setVerticalSpacing(14);
-
-    auto *usernameLabel = new QLabel(QStringLiteral("Username"));
-    auto *passwordLabel = new QLabel(QStringLiteral("Password"));
-    auto *roleLabel = new QLabel(QStringLiteral("Role"));
-
-    usernameLineEdit = new QLineEdit();
-    usernameLineEdit->setPlaceholderText(QStringLiteral("Enter username"));
-
-    passwordLineEdit = new QLineEdit();
-    passwordLineEdit->setPlaceholderText(QStringLiteral("At least 6 characters"));
-    passwordLineEdit->setEchoMode(QLineEdit::Password);
-
-    roleComboBox = new QComboBox();
-    roleComboBox->addItem(QStringLiteral("User"), QStringLiteral("user"));
-    roleComboBox->addItem(QStringLiteral("Admin"), QStringLiteral("admin"));
-
-    createUserButton = new QPushButton(QStringLiteral("Create User"));
-    createUserButton->setObjectName(QStringLiteral("primaryButton"));
-
-    messageLabel = new QLabel();
-    messageLabel->setWordWrap(true);
-    messageLabel->setObjectName(QStringLiteral("messageLabel"));
-
-    formLayout->addWidget(usernameLabel, 0, 0);
-    formLayout->addWidget(usernameLineEdit, 0, 1);
-
-    formLayout->addWidget(passwordLabel, 1, 0);
-    formLayout->addWidget(passwordLineEdit, 1, 1);
-
-    formLayout->addWidget(roleLabel, 2, 0);
-    formLayout->addWidget(roleComboBox, 2, 1);
-
-    formLayout->addWidget(createUserButton, 3, 1);
-    formLayout->addWidget(messageLabel, 4, 1);
-
-    rootLayout->addWidget(card);
+    rootLayout->addWidget(createFormCard());
     rootLayout->addStretch();
 
     connect(createUserButton, &QPushButton::clicked,
             this, &UserManagementPage::onCreateUserClicked);
 
+    applyStyleSheet();
+    updateAccessState();
+}
+
+// 集中管理用户管理页样式，后续调整表单视觉优先改这里。
+void UserManagementPage::applyStyleSheet()
+{
     setStyleSheet(
         "QLabel#pageTitle {"
         "    font-size: 24px;"
@@ -101,6 +66,11 @@ void UserManagementPage::buildUi()
         "QLabel#pageSubtitle {"
         "    font-size: 13px;"
         "    color: #6B7280;"
+        "}"
+        "QLabel#fieldLabel {"
+        "    color: #374151;"
+        "    font-size: 13px;"
+        "    font-weight: 600;"
         "}"
         "QFrame#card {"
         "    background: #FFFFFF;"
@@ -116,6 +86,10 @@ void UserManagementPage::buildUi()
         "}"
         "QLineEdit:focus, QComboBox:focus {"
         "    border: 1px solid #2563EB;"
+        "}"
+        "QLineEdit:disabled, QComboBox:disabled {"
+        "    color: #9CA3AF;"
+        "    background: #F9FAFB;"
         "}"
         "QPushButton#primaryButton {"
         "    min-height: 36px;"
@@ -134,38 +108,124 @@ void UserManagementPage::buildUi()
         "}"
         "QLabel#messageLabel {"
         "    color: #374151;"
+        "    font-size: 13px;"
         "}"
         );
 }
 
-void UserManagementPage::onCreateUserClicked()
+// 创建新增用户表单卡片，表单字段和按钮都在这里初始化。
+QFrame* UserManagementPage::createFormCard()
 {
-    QString username = usernameLineEdit->text();
-    QString password = passwordLineEdit->text();
-    QString role = roleComboBox->currentData().toString();
+    auto *card = new QFrame();
+    card->setObjectName(QStringLiteral("card"));
+    card->setMaximumWidth(560);
 
-    QString message;
+    auto *formLayout = new QGridLayout(card);
+    formLayout->setContentsMargins(22, 22, 22, 22);
+    formLayout->setHorizontalSpacing(14);
+    formLayout->setVerticalSpacing(14);
+    formLayout->setColumnStretch(1, 1);
 
-    bool success = authController.registerUser(
-        currentUser,
-        username,
-        password,
-        role,
-        message
-        );
+    usernameLineEdit = new QLineEdit();
+    usernameLineEdit->setPlaceholderText(QStringLiteral("Enter username"));
 
-    messageLabel->setText(message);
+    passwordLineEdit = new QLineEdit();
+    passwordLineEdit->setPlaceholderText(QStringLiteral("At least 6 characters"));
+    passwordLineEdit->setEchoMode(QLineEdit::Password);
 
-    if (!success) {
-        QMessageBox::warning(this, QStringLiteral("Create User Failed"), message);
+    roleComboBox = new QComboBox();
+    roleComboBox->addItem(QStringLiteral("User"), QStringLiteral("user"));
+    roleComboBox->addItem(QStringLiteral("Admin"), QStringLiteral("admin"));
+
+    createUserButton = new QPushButton(QStringLiteral("Create User"));
+    createUserButton->setObjectName(QStringLiteral("primaryButton"));
+    createUserButton->setCursor(Qt::PointingHandCursor);
+
+    messageLabel = new QLabel();
+    messageLabel->setWordWrap(true);
+    messageLabel->setObjectName(QStringLiteral("messageLabel"));
+
+    addFormRow(formLayout, 0, QStringLiteral("Username"), usernameLineEdit);
+    addFormRow(formLayout, 1, QStringLiteral("Password"), passwordLineEdit);
+    addFormRow(formLayout, 2, QStringLiteral("Role"), roleComboBox);
+
+    formLayout->addWidget(createUserButton, 3, 1);
+    formLayout->addWidget(messageLabel, 4, 1);
+
+    return card;
+}
+
+// 创建表单字段名，统一 objectName 方便 QSS 控制样式。
+QLabel* UserManagementPage::createFieldLabel(const QString& text)
+{
+    auto *label = new QLabel(text);
+    label->setObjectName(QStringLiteral("fieldLabel"));
+
+    return label;
+}
+
+// 添加一行表单，保持字段名和输入控件布局一致。
+void UserManagementPage::addFormRow(QGridLayout *layout,
+                                    int row,
+                                    const QString& labelText,
+                                    QWidget *field)
+{
+    if (!layout || !field) {
         return;
     }
 
-    QMessageBox::information(this, QStringLiteral("Create User Success"), message);
-    clearForm();
+    layout->addWidget(createFieldLabel(labelText), row, 0);
+    layout->addWidget(field, row, 1);
 }
 
-void UserManagementPage::clearForm()
+// 创建用户按钮事件：收集输入，交给 AuthController 完成注册。
+void UserManagementPage::onCreateUserClicked()
+{
+    if (!canManageUsers()) {
+        setMessage(QStringLiteral("You do not have permission to create users."));
+
+        QMessageBox::warning(
+            this,
+            QStringLiteral("Access Denied"),
+            QStringLiteral("Only admin users can create users.")
+            );
+
+        return;
+    }
+
+    QString message;
+
+    const bool success = authController.registerUser(
+        currentUser,
+        usernameLineEdit->text(),
+        passwordLineEdit->text(),
+        selectedRole(),
+        message
+        );
+
+    setMessage(message);
+
+    if (!success) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("Create User Failed"),
+            message
+            );
+
+        return;
+    }
+
+    QMessageBox::information(
+        this,
+        QStringLiteral("Create User Success"),
+        message
+        );
+
+    resetForm();
+}
+
+// 清空输入框。角色默认回到 User，避免误创建管理员账号。
+void UserManagementPage::resetForm()
 {
     usernameLineEdit->clear();
     passwordLineEdit->clear();
@@ -173,20 +233,48 @@ void UserManagementPage::clearForm()
     usernameLineEdit->setFocus();
 }
 
+// 统一控制表单可用状态，避免每个控件分散写权限逻辑。
+void UserManagementPage::setFormEnabled(bool enabled)
+{
+    usernameLineEdit->setEnabled(enabled);
+    passwordLineEdit->setEnabled(enabled);
+    roleComboBox->setEnabled(enabled);
+    createUserButton->setEnabled(enabled);
+}
+
+// 根据当前用户角色刷新页面提示和表单状态。
 void UserManagementPage::updateAccessState()
 {
-    const bool isAdmin = (currentUser.role == QStringLiteral("admin"));
+    const bool allowed = canManageUsers();
 
-    usernameLineEdit->setEnabled(isAdmin);
-    passwordLineEdit->setEnabled(isAdmin);
-    roleComboBox->setEnabled(isAdmin);
-    createUserButton->setEnabled(isAdmin);
+    setFormEnabled(allowed);
 
-    if (isAdmin) {
+    if (allowed) {
         tipLabel->setText(QStringLiteral("Create accounts for people who need access to this dashboard."));
-        messageLabel->clear();
-    } else {
-        tipLabel->setText(QStringLiteral("Only admin users can manage accounts."));
-        messageLabel->setText(QStringLiteral("You do not have permission to create users."));
+        setMessage(QString());
+        return;
     }
+
+    tipLabel->setText(QStringLiteral("Only admin users can manage accounts."));
+    setMessage(QStringLiteral("You do not have permission to create users."));
+}
+
+// 管理员判断统一收口，后续扩展权限规则时只改这里。
+bool UserManagementPage::canManageUsers() const
+{
+    return currentUser.isValid()
+    && currentUser.isActive()
+        && currentUser.isAdmin();
+}
+
+// 从下拉框读取真实角色值，避免使用界面显示文本做业务判断。
+QString UserManagementPage::selectedRole() const
+{
+    return roleComboBox->currentData().toString();
+}
+
+// 设置页面内提示信息，避免多处直接操作 messageLabel。
+void UserManagementPage::setMessage(const QString& message)
+{
+    messageLabel->setText(message);
 }

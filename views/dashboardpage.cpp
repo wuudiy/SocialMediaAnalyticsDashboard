@@ -3,7 +3,9 @@
 #include <QFrame>
 #include <QGridLayout>
 #include <QLabel>
+#include <QPair>
 #include <QVBoxLayout>
+#include <QVector>
 
 DashboardPage::DashboardPage(QWidget *parent)
     : QWidget(parent),
@@ -13,6 +15,7 @@ DashboardPage::DashboardPage(QWidget *parent)
     buildUi();
 }
 
+// 刷新欢迎信息。这里只更新展示文本，不做用户权限判断。
 void DashboardPage::setCurrentUser(const User& user)
 {
     welcomeLabel->setText(
@@ -24,6 +27,7 @@ void DashboardPage::setCurrentUser(const User& user)
         );
 }
 
+// 创建 Dashboard 页面结构：标题、模块卡片、图表占位、最近内容占位。
 void DashboardPage::buildUi()
 {
     auto *rootLayout = new QVBoxLayout(this);
@@ -33,95 +37,32 @@ void DashboardPage::buildUi()
     welcomeLabel = new QLabel(QStringLiteral("Welcome back"));
     welcomeLabel->setObjectName(QStringLiteral("pageTitle"));
 
-    subtitleLabel = new QLabel(QStringLiteral("Your dashboard is ready. Data modules will be connected later."));
+    subtitleLabel = new QLabel(
+        QStringLiteral("Your dashboard is ready. Data modules will be connected later.")
+        );
     subtitleLabel->setObjectName(QStringLiteral("pageSubtitle"));
 
     rootLayout->addWidget(welcomeLabel);
     rootLayout->addWidget(subtitleLabel);
 
-    /*
-     * 第一块：主页功能入口
-     */
-    auto *moduleLayout = new QGridLayout();
-    moduleLayout->setSpacing(16);
+    rootLayout->addLayout(createModuleGrid());
+    rootLayout->addLayout(createPanelGrid());
 
-    moduleLayout->addWidget(
-        createModuleCard(
-            QStringLiteral("Post Overview"),
-            QStringLiteral("Post statistics will be shown here after the post module is connected.")
-            ),
-        0,
-        0
-        );
-
-    moduleLayout->addWidget(
-        createModuleCard(
-            QStringLiteral("Audience Overview"),
-            QStringLiteral("Follower and audience data will be shown here after analytics data is available.")
-            ),
-        0,
-        1
-        );
-
-    moduleLayout->addWidget(
-        createModuleCard(
-            QStringLiteral("Engagement Overview"),
-            QStringLiteral("Likes, comments, shares and engagement rate will be connected later.")
-            ),
-        0,
-        2
-        );
-
-    moduleLayout->addWidget(
-        createModuleCard(
-            QStringLiteral("Report Overview"),
-            QStringLiteral("Report summaries and export status will be placed here later.")
-            ),
-        0,
-        3
-        );
-
-    rootLayout->addLayout(moduleLayout);
-
-    /*
-     * 第二块：图表区域占位
-     * 现在先空着，后面接真实数据或 Qt Charts 时再填。
-     */
-    auto *panelLayout = new QGridLayout();
-    panelLayout->setSpacing(16);
-
-    panelLayout->addWidget(
-        createEmptyPanel(
-            QStringLiteral("Analytics Trend"),
-            QStringLiteral("No data connected yet. This area is reserved for trend charts.")
-            ),
-        0,
-        0
-        );
-
-    panelLayout->addWidget(
-        createEmptyPanel(
-            QStringLiteral("Platform Performance"),
-            QStringLiteral("No data connected yet. This area is reserved for platform comparison.")
-            ),
-        0,
-        1
-        );
-
-    rootLayout->addLayout(panelLayout);
-
-    /*
-     * 第三块：最近内容区域占位
-     * 后面接 posts 表之后，这里可以换成 QTableWidget。
-     */
     rootLayout->addWidget(
         createEmptyPanel(
             QStringLiteral("Recent Posts"),
-            QStringLiteral("No post data yet. Recent posts will be listed here after the database module is added.")
+            QStringLiteral("No post data yet. Recent posts will be listed here after the database module is added."),
+            220
             ),
         1
         );
 
+    applyStyleSheet();
+}
+
+// 集中管理 Dashboard 样式，避免布局代码里混入大段 QSS。
+void DashboardPage::applyStyleSheet()
+{
     setStyleSheet(
         "QLabel#pageTitle {"
         "    font-size: 24px;"
@@ -159,6 +100,70 @@ void DashboardPage::buildUi()
         );
 }
 
+// 创建顶部模块卡片区域，后续接入真实数据时优先改这里。
+QGridLayout* DashboardPage::createModuleGrid()
+{
+    auto *grid = new QGridLayout();
+    grid->setSpacing(16);
+
+    const QVector<QPair<QString, QString>> modules = {
+        {
+            QStringLiteral("Post Overview"),
+            QStringLiteral("Post statistics will be shown here after the post module is connected.")
+        },
+        {
+            QStringLiteral("Audience Overview"),
+            QStringLiteral("Follower and audience data will be shown here after analytics data is available.")
+        },
+        {
+            QStringLiteral("Engagement Overview"),
+            QStringLiteral("Likes, comments, shares and engagement rate will be connected later.")
+        },
+        {
+            QStringLiteral("Report Overview"),
+            QStringLiteral("Report summaries and export status will be placed here later.")
+        }
+    };
+
+    for (int i = 0; i < modules.size(); ++i) {
+        grid->addWidget(
+            createModuleCard(modules[i].first, modules[i].second),
+            0,
+            i
+            );
+    }
+
+    return grid;
+}
+
+// 创建中间图表占位区域。等接入 Qt Charts 或自定义图表后替换这里。
+QGridLayout* DashboardPage::createPanelGrid()
+{
+    auto *grid = new QGridLayout();
+    grid->setSpacing(16);
+
+    grid->addWidget(
+        createEmptyPanel(
+            QStringLiteral("Analytics Trend"),
+            QStringLiteral("No data connected yet. This area is reserved for trend charts.")
+            ),
+        0,
+        0
+        );
+
+    grid->addWidget(
+        createEmptyPanel(
+            QStringLiteral("Platform Performance"),
+            QStringLiteral("No data connected yet. This area is reserved for platform comparison.")
+            ),
+        0,
+        1
+        );
+
+    return grid;
+}
+
+// 创建一个顶部功能卡片。卡片只展示模块说明，不处理点击事件。
 QFrame* DashboardPage::createModuleCard(const QString& title,
                                         const QString& description)
 {
@@ -184,12 +189,14 @@ QFrame* DashboardPage::createModuleCard(const QString& title,
     return card;
 }
 
+// 创建空状态面板。当前项目还没接入帖子和图表数据，所以先统一显示占位信息。
 QFrame* DashboardPage::createEmptyPanel(const QString& title,
-                                        const QString& description)
+                                        const QString& description,
+                                        int minimumHeight)
 {
     auto *panel = new QFrame();
     panel->setObjectName(QStringLiteral("panel"));
-    panel->setMinimumHeight(220);
+    panel->setMinimumHeight(minimumHeight);
 
     auto *layout = new QVBoxLayout(panel);
     layout->setContentsMargins(20, 18, 20, 18);

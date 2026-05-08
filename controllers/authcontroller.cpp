@@ -4,114 +4,76 @@
 AuthController::AuthController()
 {
 }
-
 /*
- * 登录验证流程
- * ----------------
- * 1. 去除输入前后空格；
- * 2. 检查用户名和密码是否为空；
- * 3. 根据用户名查询数据库用户；
- * 4. 判断用户是否存在；
- * 5. 判断账号是否启用；
- * 6. 解密数据库中的密码；
- * 7. 与用户输入密码进行比较；
- * 8. 登录成功后保存 currentUser。
+ * 登录流程：
+ * 1. 校验输入；
+ * 2. 根据用户名查询用户；
+ * 3. 检查用户是否存在；
+ * 4. 检查账号是否启用；
+ * 5. 解密密码并比对；
+ * 6. 保存当前用户。
  */
+
+// 登录用户：校验输入、查询用户、检查状态、比对密码。
 bool AuthController::loginUser(const QString& username,
                                const QString& password,
                                QString& message)
 {
-    QString trimmedUsername = username.trimmed();
-    QString trimmedPassword = password.trimmed();
+    const QString trimmedUsername = username.trimmed();
+    const QString trimmedPassword = password.trimmed();
 
-    // 输入验证：用户名不能为空
-    if (trimmedUsername.isEmpty()) {
-        message = "Username cannot be empty.";
+    if (!validateLoginInput(trimmedUsername, trimmedPassword, message)) {
         return false;
     }
 
-    // 输入验证：密码不能为空
-    if (trimmedPassword.isEmpty()) {
-        message = "Password cannot be empty.";
-        return false;
-    }
+    const User userFromDatabase = userRepository.findByUsername(trimmedUsername);
 
-    // 查询用户。Repository 内部会自动加密 username 后再查询。
-    User user = userRepository.findByUsername(trimmedUsername);
-
-    // userId == -1 表示没有查询到用户
-    if (user.userId == -1) {
+    if (!userFromDatabase.isValid()) {
         message = "User does not exist.";
         return false;
     }
 
-    // 检查账号状态
-    if (user.status != "active") {
+    if (!userFromDatabase.isActive()) {
         message = "This account is disabled.";
         return false;
     }
 
-    // 数据库中的 password 是 DES 密文，这里需要解密后再比较
-    QString decryptedPassword = DESUtil::decrypt(user.password);
+    const QString realPassword = DESUtil::decrypt(userFromDatabase.password);
 
-    if (decryptedPassword != trimmedPassword) {
+    if (realPassword != trimmedPassword) {
         message = "Incorrect password.";
         return false;
     }
 
-    // 数据库中的 username 也是密文。
-    // 登录成功后，把 User 对象中的 username 改成明文，方便界面显示。
-    user.username = DESUtil::decrypt(user.username);
+    currentUser = userFromDatabase;
 
-    currentUser = user;
+    // 数据库里 username 是密文，登录成功后转成明文供界面显示。
+    currentUser.username = DESUtil::decrypt(userFromDatabase.username);
+
     message = "Login successful.";
     return true;
 }
 
-// 注册新用户
+// 注册用户：只允许管理员操作，并在写入前完成必要校验。
 bool AuthController::registerUser(const User& operatorUser,
                                   const QString& username,
                                   const QString& password,
                                   const QString& role,
                                   QString& message)
 {
-    QString trimmedUsername = username.trimmed();
-    QString trimmedPassword = password.trimmed();
-    QString trimmedRole = role.trimmed().toLower();
+    const QString trimmedUsername = username.trimmed();
+    const QString trimmedPassword = password.trimmed();
+    const QString normalizedRole = role.trimmed().toLower();
 
-    // 界面可以隐藏按钮，但权限判断还是要放在业务层再挡一次
-    if (operatorUser.userId == -1 || operatorUser.role != "admin") {
+    if (!canCreateUser(operatorUser)) {
         message = "Only admin can register new users.";
         return false;
     }
 
-    if (trimmedUsername.isEmpty()) {
-        message = "Username cannot be empty.";
-        return false;
-    }
-
-    if (trimmedUsername.length() < 3) {
-        message = "Username must be at least 3 characters.";
-        return false;
-    }
-
-    if (trimmedUsername.contains(' ')) {
-        message = "Username cannot contain spaces.";
-        return false;
-    }
-
-    if (trimmedPassword.isEmpty()) {
-        message = "Password cannot be empty.";
-        return false;
-    }
-
-    if (trimmedPassword.length() < 6) {
-        message = "Password must be at least 6 characters.";
-        return false;
-    }
-
-    if (trimmedRole != "admin" && trimmedRole != "user") {
-        message = "Invalid role selected.";
+    if (!validateRegisterInput(trimmedUsername,
+                               trimmedPassword,
+                               normalizedRole,
+                               message)) {
         return false;
     }
 
@@ -120,13 +82,13 @@ bool AuthController::registerUser(const User& operatorUser,
         return false;
     }
 
-    QString encryptedPassword = DESUtil::encrypt(trimmedPassword);
+    const QString encryptedPassword = DESUtil::encrypt(trimmedPassword);
 
-    bool inserted = userRepository.insertUser(
+    const bool inserted = userRepository.insertUser(
         trimmedUsername,
         encryptedPassword,
-        trimmedRole,
-        "active"
+        normalizedRole,
+        QStringLiteral("active")
         );
 
     if (!inserted) {
@@ -138,12 +100,78 @@ bool AuthController::registerUser(const User& operatorUser,
     return true;
 }
 
+// 获取当前用户角色，主要给界面判断权限使用。
 QString AuthController::getCurrentUserRole() const
 {
     return currentUser.role;
 }
 
+// 获取当前登录用户，登录失败时返回默认无效用户。
 User AuthController::getCurrentUser() const
 {
     return currentUser;
 }
+
+// 校验登录输入，避免空值继续进入数据库查询。
+bool AuthController::validateLoginInput(const QString& username,
+                                        const QString& password,
+                                        QString& message) const
+{
+    if (username.isEmpty()) {
+        message = "Username cannot be empty.";
+        return false;
+    }
+
+    if (password.isEmpty()) {
+        message = "Password cannot be empty.";
+        return false;
+    }
+
+    return true;
+}
+
+// 校验注册输入，规则集中放这里，避免散落在界面代码里。
+bool AuthController::validateRegisterInput(const QString& username,
+                                           const QString& password,
+                                           const QString& role,
+                                           QString& message) const
+{
+    if (username.isEmpty()) {
+        message = "Username cannot be empty.";
+        return false;
+    }
+
+    if (username.length() < 3) {
+        message = "Username must be at least 3 characters.";
+        return false;
+    }
+
+    if (username.contains(' ')) {
+        message = "Username cannot contain spaces.";
+        return false;
+    }
+
+    if (password.isEmpty()) {
+        message = "Password cannot be empty.";
+        return false;
+    }
+
+    if (password.length() < 6) {
+        message = "Password must be at least 6 characters.";
+        return false;
+    }
+
+    if (role != QStringLiteral("admin") && role != QStringLiteral("user")) {
+        message = "Invalid role selected.";
+        return false;
+    }
+
+    return true;
+}
+
+// 创建用户权限统一收口，后续扩展角色权限时只改这里。
+bool AuthController::canCreateUser(const User& operatorUser) const
+{
+    return operatorUser.isValid() && operatorUser.isActive() && operatorUser.isAdmin();
+}
+
