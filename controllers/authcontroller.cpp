@@ -68,6 +68,76 @@ bool AuthController::loginUser(const QString& username,
     return true;
 }
 
+// 注册新用户
+bool AuthController::registerUser(const User& operatorUser,
+                                  const QString& username,
+                                  const QString& password,
+                                  const QString& role,
+                                  QString& message)
+{
+    QString trimmedUsername = username.trimmed();
+    QString trimmedPassword = password.trimmed();
+    QString trimmedRole = role.trimmed().toLower();
+
+    // 界面可以隐藏按钮，但权限判断还是要放在业务层再挡一次
+    if (operatorUser.userId == -1 || operatorUser.role != "admin") {
+        message = "Only admin can register new users.";
+        return false;
+    }
+
+    if (trimmedUsername.isEmpty()) {
+        message = "Username cannot be empty.";
+        return false;
+    }
+
+    if (trimmedUsername.length() < 3) {
+        message = "Username must be at least 3 characters.";
+        return false;
+    }
+
+    if (trimmedUsername.contains(' ')) {
+        message = "Username cannot contain spaces.";
+        return false;
+    }
+
+    if (trimmedPassword.isEmpty()) {
+        message = "Password cannot be empty.";
+        return false;
+    }
+
+    if (trimmedPassword.length() < 6) {
+        message = "Password must be at least 6 characters.";
+        return false;
+    }
+
+    if (trimmedRole != "admin" && trimmedRole != "user") {
+        message = "Invalid role selected.";
+        return false;
+    }
+
+    if (userRepository.usernameExists(trimmedUsername)) {
+        message = "The username already exists.";
+        return false;
+    }
+
+    QString encryptedPassword = DESUtil::encrypt(trimmedPassword);
+
+    bool inserted = userRepository.insertUser(
+        trimmedUsername,
+        encryptedPassword,
+        trimmedRole,
+        "active"
+        );
+
+    if (!inserted) {
+        message = "Failed to register user. Please check the database.";
+        return false;
+    }
+
+    message = "User registered successfully.";
+    return true;
+}
+
 QString AuthController::getCurrentUserRole() const
 {
     return currentUser.role;

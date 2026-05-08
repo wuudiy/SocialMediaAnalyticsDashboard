@@ -16,7 +16,7 @@ set(CMAKE_AUTOUIC_SEARCH_PATHS
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# 这里必须加 Sql，否则后面 QSqlDatabase / MySQL 会链接失败
+# 项目用到了 Qt Widgets 和 Qt Sql
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets Sql)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Sql)
 
@@ -24,23 +24,27 @@ find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Sql)
 set(PROJECT_SOURCES
     main.cpp
 
-    controllers/AuthController.h
-    controllers/AuthController.cpp
+    controllers/authcontroller.h
+    controllers/authcontroller.cpp
 
-    models/User.h
-    models/User.cpp
+    models/user.h
+    models/user.cpp
 
-    services/DatabaseManager.h
-    services/DatabaseManager.cpp
-    services/UserRepository.h
-    services/UserRepository.cpp
-    services/DESUtil.h
-    services/DESUtil.cpp
+    services/databasemanager.h
+    services/databasemanager.cpp
+    services/userrepository.h
+    services/userrepository.cpp
+    services/desutil.h
+    services/desutil.cpp
 
-    views/LoginView.h
-    views/LoginView.cpp
+    views/loginview.h
+    views/loginview.cpp
     views/mainwindow.h
     views/mainwindow.cpp
+    views/dashboardpage.h
+    views/dashboardpage.cpp
+    views/usermanagementpage.h
+    views/usermanagementpage.cpp
 
     forms/LoginForm.ui
     forms/mainwindow.ui
@@ -50,6 +54,8 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
     qt_add_executable(SocialMediaAnalyticsDashboard
         MANUAL_FINALIZATION
         ${PROJECT_SOURCES}
+        views/dashboardpage.h views/dashboardpage.cpp
+        views/usermanagementpage.h views/usermanagementpage.cpp
     )
 else()
     if(ANDROID)
@@ -63,14 +69,12 @@ else()
     endif()
 endif()
 
-# 链接 Qt Widgets 和 Qt Sql
 target_link_libraries(SocialMediaAnalyticsDashboard
     PRIVATE
     Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::Sql
 )
 
-# 让 include 更方便
 target_include_directories(SocialMediaAnalyticsDashboard PRIVATE
     views
     models
@@ -79,7 +83,6 @@ target_include_directories(SocialMediaAnalyticsDashboard PRIVATE
     forms
 )
 
-# Qt bundle 设置，保留你原来的结构
 if(${QT_VERSION} VERSION_LESS 6.1.0)
     set(BUNDLE_ID_OPTION MACOSX_BUNDLE_GUI_IDENTIFIER com.example.SocialMediaAnalyticsDashboard)
 endif()

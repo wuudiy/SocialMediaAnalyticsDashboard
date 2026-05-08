@@ -6,19 +6,16 @@
 #include <QVector>
 
 /*
- * Service / Utility 层：DESUtil
- * ----------------------------
- * 作用：
- * 1. 提供 DES 加密和解密方法；
- * 2. 用于加密保存 username 和 password；
- * 3. 登录验证时，负责解密数据库中的 password。
- *
- * 对外只暴露两个核心方法：
- * - encrypt()
- * - decrypt()
- *
- * 其余函数都是 DES 内部流程：
- * 初始置换、子密钥生成、Feistel 轮函数、S-box 替换、P-box 置换等。
+Service / Utility 层：DESUtil
+作用：
+1. 提供 DES 加密和解密方法；
+2. 用于加密保存 username 和 password；
+3. 登录验证时，负责解密数据库中的 password。
+对外只暴露两个核心方法：
+encrypt()
+decrypt()
+其余函数都是 DES 内部流程：
+初始置换、子密钥生成、Feistel 轮函数、S-box 替换、P-box 置换等。
  */
 class DESUtil
 {
