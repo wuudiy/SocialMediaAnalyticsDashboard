@@ -18,7 +18,7 @@ constexpr const char* kDatabaseName = "social_media_system";
 constexpr const char* kDatabaseUser = "root";
 constexpr const char* kDatabasePassword = "123456";
 
-// 默认管理员账号。程序首次启动时自动创建。
+// 默认管理员账号。程序第一次启动时自动创建。
 constexpr const char* kDefaultAdminUsername = "admin";
 constexpr const char* kDefaultAdminPassword = "123456";
 constexpr const char* kDefaultAdminRole = "admin";
@@ -34,6 +34,10 @@ bool DatabaseManager::initialize()
     }
 
     if (!createUsersTable()) {
+        return false;
+    }
+
+    if (!createPostsTable()) {
         return false;
     }
 
@@ -69,7 +73,7 @@ QString DatabaseManager::lastError()
     return s_lastError;
 }
 
-// 连接 MySQL。如果连接已经存在，则复用同一个连接。
+// 连接 MySQL。如果连接已经存在，就复用原来的连接。
 bool DatabaseManager::connectDatabase()
 {
     QSqlDatabase db;
@@ -105,7 +109,7 @@ bool DatabaseManager::connectDatabase()
     return true;
 }
 
-// 创建 users 表。这里保持原有表结构，只统一 SQL 风格和错误处理。
+// 创建 users 表
 bool DatabaseManager::createUsersTable()
 {
     QSqlQuery query(database());
@@ -133,7 +137,39 @@ bool DatabaseManager::createUsersTable()
     return true;
 }
 
-// 创建默认管理员。如果 admin 已存在，则不重复插入。
+// 创建 posts 表。这个表是帖子管理、统计分析、Dashboard 展示的基础。
+bool DatabaseManager::createPostsTable()
+{
+    QSqlQuery query(database());
+
+    const QString sql = QStringLiteral(
+        "CREATE TABLE IF NOT EXISTS posts ("
+        "    post_id INT PRIMARY KEY AUTO_INCREMENT,"
+        "    platform VARCHAR(50) NOT NULL,"
+        "    account_name VARCHAR(100) NOT NULL,"
+        "    content TEXT NOT NULL,"
+        "    publish_date DATE NOT NULL,"
+        "    likes INT NOT NULL DEFAULT 0,"
+        "    comments INT NOT NULL DEFAULT 0,"
+        "    shares INT NOT NULL DEFAULT 0,"
+        "    views INT NOT NULL DEFAULT 0,"
+        "    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+        ")"
+        );
+
+    if (!query.exec(sql)) {
+        setLastError(query.lastError().text());
+
+        qDebug().noquote() << QStringLiteral("Create posts table failed: %1")
+                                  .arg(query.lastError().text());
+
+        return false;
+    }
+
+    return true;
+}
+
+// 创建默认管理员。如果 admin 已经存在，就不重复插入。
 bool DatabaseManager::createDefaultAdmin()
 {
     const QString encryptedUsername = DESUtil::encrypt(

@@ -1,18 +1,28 @@
 #include "dashboardpage.h"
 
+#include <QAbstractItemView>
 #include <QFrame>
 #include <QGridLayout>
+#include <QHeaderView>
 #include <QLabel>
-#include <QPair>
+#include <QTableWidget>
+#include <QTableWidgetItem>
 #include <QVBoxLayout>
-#include <QVector>
 
 DashboardPage::DashboardPage(QWidget *parent)
     : QWidget(parent),
     welcomeLabel(nullptr),
-    subtitleLabel(nullptr)
+    subtitleLabel(nullptr),
+    totalPostsValueLabel(nullptr),
+    totalInteractionsValueLabel(nullptr),
+    totalViewsValueLabel(nullptr),
+    engagementRateValueLabel(nullptr),
+    topPostTitleLabel(nullptr),
+    topPostDetailLabel(nullptr),
+    recentPostsTable(nullptr)
 {
     buildUi();
+    refreshDashboard();
 }
 
 // 刷新欢迎信息。这里只更新展示文本，不做用户权限判断。
@@ -23,11 +33,13 @@ void DashboardPage::setCurrentUser(const User& user)
         );
 
     subtitleLabel->setText(
-        QStringLiteral("Your dashboard is ready. Data modules will be connected later.")
+        QStringLiteral("Here is the latest overview of your local social media data.")
         );
+
+    refreshDashboard();
 }
 
-// 创建 Dashboard 页面结构：标题、模块卡片、图表占位、最近内容占位。
+// 创建 Dashboard 页面结构：欢迎信息、统计卡片、热门帖子、最近帖子表格。
 void DashboardPage::buildUi()
 {
     auto *rootLayout = new QVBoxLayout(this);
@@ -38,24 +50,16 @@ void DashboardPage::buildUi()
     welcomeLabel->setObjectName(QStringLiteral("pageTitle"));
 
     subtitleLabel = new QLabel(
-        QStringLiteral("Your dashboard is ready. Data modules will be connected later.")
+        QStringLiteral("Here is the latest overview of your local social media data.")
         );
     subtitleLabel->setObjectName(QStringLiteral("pageSubtitle"));
 
     rootLayout->addWidget(welcomeLabel);
     rootLayout->addWidget(subtitleLabel);
 
-    rootLayout->addLayout(createModuleGrid());
-    rootLayout->addLayout(createPanelGrid());
-
-    rootLayout->addWidget(
-        createEmptyPanel(
-            QStringLiteral("Recent Posts"),
-            QStringLiteral("No post data yet. Recent posts will be listed here after the database module is added."),
-            220
-            ),
-        1
-        );
+    rootLayout->addLayout(createSummaryGrid());
+    rootLayout->addWidget(createTopPostCard());
+    rootLayout->addWidget(createRecentPostsCard(), 1);
 
     applyStyleSheet();
 }
@@ -73,146 +77,263 @@ void DashboardPage::applyStyleSheet()
         "    font-size: 13px;"
         "    color: #6B7280;"
         "}"
-        "QFrame#card, QFrame#panel {"
+        "QFrame#card {"
         "    background: #FFFFFF;"
         "    border: 1px solid #E5E7EB;"
         "    border-radius: 12px;"
         "}"
         "QLabel#cardTitle {"
+        "    color: #6B7280;"
+        "    font-size: 12px;"
+        "    font-weight: 600;"
+        "}"
+        "QLabel#cardValue {"
         "    color: #111827;"
-        "    font-size: 15px;"
+        "    font-size: 26px;"
         "    font-weight: 700;"
         "}"
         "QLabel#cardDescription {"
-        "    color: #6B7280;"
+        "    color: #9CA3AF;"
         "    font-size: 12px;"
-        "    line-height: 18px;"
         "}"
         "QLabel#panelTitle {"
         "    color: #111827;"
         "    font-size: 16px;"
         "    font-weight: 700;"
         "}"
-        "QLabel#emptyText {"
-        "    color: #9CA3AF;"
+        "QLabel#topPostTitle {"
+        "    color: #111827;"
+        "    font-size: 14px;"
+        "    font-weight: 600;"
+        "}"
+        "QLabel#topPostDetail {"
+        "    color: #6B7280;"
         "    font-size: 13px;"
+        "}"
+        "QTableWidget {"
+        "    border: 1px solid #E5E7EB;"
+        "    border-radius: 8px;"
+        "    background: #FFFFFF;"
+        "    gridline-color: #E5E7EB;"
+        "}"
+        "QHeaderView::section {"
+        "    background: #F9FAFB;"
+        "    color: #374151;"
+        "    border: none;"
+        "    border-bottom: 1px solid #E5E7EB;"
+        "    padding: 8px;"
+        "    font-weight: 600;"
         "}"
         );
 }
 
-// 创建顶部模块卡片区域，后续接入真实数据时优先改这里。
-QGridLayout* DashboardPage::createModuleGrid()
-{
-    auto *grid = new QGridLayout();
-    grid->setSpacing(16);
-
-    const QVector<QPair<QString, QString>> modules = {
-        {
-            QStringLiteral("Post Overview"),
-            QStringLiteral("Post statistics will be shown here after the post module is connected.")
-        },
-        {
-            QStringLiteral("Audience Overview"),
-            QStringLiteral("Follower and audience data will be shown here after analytics data is available.")
-        },
-        {
-            QStringLiteral("Engagement Overview"),
-            QStringLiteral("Likes, comments, shares and engagement rate will be connected later.")
-        },
-        {
-            QStringLiteral("Report Overview"),
-            QStringLiteral("Report summaries and export status will be placed here later.")
-        }
-    };
-
-    for (int i = 0; i < modules.size(); ++i) {
-        grid->addWidget(
-            createModuleCard(modules[i].first, modules[i].second),
-            0,
-            i
-            );
-    }
-
-    return grid;
-}
-
-// 创建中间图表占位区域。等接入 Qt Charts 或自定义图表后替换这里。
-QGridLayout* DashboardPage::createPanelGrid()
+QGridLayout* DashboardPage::createSummaryGrid()
 {
     auto *grid = new QGridLayout();
     grid->setSpacing(16);
 
     grid->addWidget(
-        createEmptyPanel(
-            QStringLiteral("Analytics Trend"),
-            QStringLiteral("No data connected yet. This area is reserved for trend charts.")
+        createSummaryCard(
+            QStringLiteral("Total Posts"),
+            &totalPostsValueLabel,
+            QStringLiteral("All imported or manually added posts")
             ),
         0,
         0
         );
 
     grid->addWidget(
-        createEmptyPanel(
-            QStringLiteral("Platform Performance"),
-            QStringLiteral("No data connected yet. This area is reserved for platform comparison.")
+        createSummaryCard(
+            QStringLiteral("Interactions"),
+            &totalInteractionsValueLabel,
+            QStringLiteral("Likes + comments + shares")
             ),
         0,
         1
         );
 
+    grid->addWidget(
+        createSummaryCard(
+            QStringLiteral("Views"),
+            &totalViewsValueLabel,
+            QStringLiteral("Total exposure or view count")
+            ),
+        0,
+        2
+        );
+
+    grid->addWidget(
+        createSummaryCard(
+            QStringLiteral("Engagement Rate"),
+            &engagementRateValueLabel,
+            QStringLiteral("Interactions divided by views")
+            ),
+        0,
+        3
+        );
+
     return grid;
 }
 
-// 创建一个顶部功能卡片。卡片只展示模块说明，不处理点击事件。
-QFrame* DashboardPage::createModuleCard(const QString& title,
-                                        const QString& description)
+QFrame* DashboardPage::createSummaryCard(const QString& title,
+                                         QLabel **valueLabel,
+                                         const QString& description)
 {
     auto *card = new QFrame();
     card->setObjectName(QStringLiteral("card"));
-    card->setMinimumHeight(120);
+    card->setMinimumHeight(116);
 
     auto *layout = new QVBoxLayout(card);
     layout->setContentsMargins(18, 16, 18, 16);
-    layout->setSpacing(10);
+    layout->setSpacing(8);
 
     auto *titleLabel = new QLabel(title);
     titleLabel->setObjectName(QStringLiteral("cardTitle"));
+
+    auto *numberLabel = new QLabel(QStringLiteral("0"));
+    numberLabel->setObjectName(QStringLiteral("cardValue"));
 
     auto *descriptionLabel = new QLabel(description);
     descriptionLabel->setObjectName(QStringLiteral("cardDescription"));
     descriptionLabel->setWordWrap(true);
 
     layout->addWidget(titleLabel);
+    layout->addWidget(numberLabel);
     layout->addWidget(descriptionLabel);
     layout->addStretch();
+
+    if (valueLabel) {
+        *valueLabel = numberLabel;
+    }
 
     return card;
 }
 
-// 创建空状态面板。当前项目还没接入帖子和图表数据，所以先统一显示占位信息。
-QFrame* DashboardPage::createEmptyPanel(const QString& title,
-                                        const QString& description,
-                                        int minimumHeight)
+QFrame* DashboardPage::createTopPostCard()
 {
-    auto *panel = new QFrame();
-    panel->setObjectName(QStringLiteral("panel"));
-    panel->setMinimumHeight(minimumHeight);
+    auto *card = new QFrame();
+    card->setObjectName(QStringLiteral("card"));
+    card->setMinimumHeight(110);
 
-    auto *layout = new QVBoxLayout(panel);
+    auto *layout = new QVBoxLayout(card);
+    layout->setContentsMargins(20, 18, 20, 18);
+    layout->setSpacing(10);
+
+    auto *titleLabel = new QLabel(QStringLiteral("Top Post"));
+    titleLabel->setObjectName(QStringLiteral("panelTitle"));
+
+    topPostTitleLabel = new QLabel(QStringLiteral("No post data yet."));
+    topPostTitleLabel->setObjectName(QStringLiteral("topPostTitle"));
+    topPostTitleLabel->setWordWrap(true);
+
+    topPostDetailLabel = new QLabel(QStringLiteral("Add post data in Post Data page first."));
+    topPostDetailLabel->setObjectName(QStringLiteral("topPostDetail"));
+    topPostDetailLabel->setWordWrap(true);
+
+    layout->addWidget(titleLabel);
+    layout->addWidget(topPostTitleLabel);
+    layout->addWidget(topPostDetailLabel);
+
+    return card;
+}
+
+QFrame* DashboardPage::createRecentPostsCard()
+{
+    auto *card = new QFrame();
+    card->setObjectName(QStringLiteral("card"));
+
+    auto *layout = new QVBoxLayout(card);
     layout->setContentsMargins(20, 18, 20, 18);
     layout->setSpacing(12);
 
-    auto *titleLabel = new QLabel(title);
+    auto *titleLabel = new QLabel(QStringLiteral("Recent Posts"));
     titleLabel->setObjectName(QStringLiteral("panelTitle"));
 
-    auto *descriptionLabel = new QLabel(description);
-    descriptionLabel->setObjectName(QStringLiteral("emptyText"));
-    descriptionLabel->setWordWrap(true);
+    recentPostsTable = new QTableWidget();
+    setupRecentPostsTable();
 
     layout->addWidget(titleLabel);
-    layout->addStretch();
-    layout->addWidget(descriptionLabel);
-    layout->addStretch();
+    layout->addWidget(recentPostsTable, 1);
 
-    return panel;
+    return card;
+}
+
+void DashboardPage::setupRecentPostsTable()
+{
+    recentPostsTable->setColumnCount(7);
+
+    recentPostsTable->setHorizontalHeaderLabels({
+        QStringLiteral("Platform"),
+        QStringLiteral("Account"),
+        QStringLiteral("Content"),
+        QStringLiteral("Date"),
+        QStringLiteral("Interactions"),
+        QStringLiteral("Views"),
+        QStringLiteral("Rate")
+    });
+
+    recentPostsTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    recentPostsTable->setSelectionMode(QAbstractItemView::SingleSelection);
+    recentPostsTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    recentPostsTable->verticalHeader()->setVisible(false);
+    recentPostsTable->horizontalHeader()->setStretchLastSection(true);
+    recentPostsTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
+}
+
+void DashboardPage::refreshDashboard()
+{
+    const DashboardSummary summary = analyticsService.loadDashboardSummary();
+
+    totalPostsValueLabel->setText(QString::number(summary.totalPosts));
+    totalInteractionsValueLabel->setText(QString::number(summary.totalInteractions));
+    totalViewsValueLabel->setText(QString::number(summary.totalViews));
+    engagementRateValueLabel->setText(formatPercent(summary.averageEngagementRate));
+
+    if (summary.totalPosts <= 0) {
+        topPostTitleLabel->setText(QStringLiteral("No post data yet."));
+        topPostDetailLabel->setText(QStringLiteral("Go to Post Data page and add some records first."));
+    } else {
+        topPostTitleLabel->setText(summary.topPostContent);
+        topPostDetailLabel->setText(
+            QStringLiteral("Platform: %1 | Interactions: %2")
+                .arg(summary.topPostPlatform)
+                .arg(summary.topPostInteractions)
+            );
+    }
+
+    fillRecentPostsTable(analyticsService.loadRecentPosts(8));
+}
+
+void DashboardPage::fillRecentPostsTable(const QList<Post>& posts)
+{
+    recentPostsTable->setRowCount(posts.size());
+
+    for (int row = 0; row < posts.size(); ++row) {
+        const Post post = posts.at(row);
+
+        const QStringList values = {
+            post.platform,
+            post.accountName,
+            post.content,
+            post.publishDate.toString(QStringLiteral("yyyy-MM-dd")),
+            QString::number(post.interactionCount()),
+            QString::number(post.views),
+            formatPercent(post.engagementRate())
+        };
+
+        for (int column = 0; column < values.size(); ++column) {
+            auto *item = new QTableWidgetItem(values.at(column));
+
+            if (column >= 4) {
+                item->setTextAlignment(Qt::AlignCenter);
+            }
+
+            recentPostsTable->setItem(row, column, item);
+        }
+    }
+}
+
+QString DashboardPage::formatPercent(double value) const
+{
+    return QStringLiteral("%1%").arg(value * 100.0, 0, 'f', 2);
 }

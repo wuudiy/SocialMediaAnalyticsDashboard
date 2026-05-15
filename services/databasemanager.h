@@ -10,14 +10,15 @@
  * 负责：
  * - 连接 MySQL；
  * - 初始化 users 表；
+ * - 初始化 posts 表；
  * - 创建默认管理员；
  * - 提供全局数据库连接；
  * - 保存最近一次数据库错误。
  *
  * 不负责：
- * - 用户登录校验；
+ * - 登录校验；
  * - 用户注册业务；
- * - 具体页面逻辑。
+ * - 页面显示逻辑。
  */
 class DatabaseManager
 {
@@ -41,13 +42,16 @@ private:
     // 创建 users 表。
     static bool createUsersTable();
 
+    // 创建 posts 表，用来保存社交媒体帖子数据。
+    static bool createPostsTable();
+
     // 创建默认管理员账号。
     static bool createDefaultAdmin();
 
     // 数据库连接名统一收口。
     static QString connectionName();
 
-    // 记录最近一次错误。
+    // 保存最近一次错误。
     static void setLastError(const QString& error);
 
 private:

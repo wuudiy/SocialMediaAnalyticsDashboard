@@ -12,6 +12,7 @@ class MainWindow;
 QT_END_NAMESPACE
 
 class DashboardPage;
+class PostManagementPage;
 class UserManagementPage;
 
 class QLabel;
@@ -46,6 +47,7 @@ public:
 
 private slots:
     void showDashboardPage();
+    void showPostManagementPage();
     void showAnalyticsPage();
     void showUserManagementPage();
     void showSettingsPage();
@@ -94,6 +96,7 @@ private:
     QLabel *userInfoLabel;
 
     QPushButton *dashboardButton;
+    QPushButton *postManagementButton;
     QPushButton *analyticsButton;
     QPushButton *userManagementButton;
     QPushButton *settingsButton;
@@ -102,6 +105,7 @@ private:
     QStackedWidget *pageStack;
 
     DashboardPage *dashboardPage;
+    PostManagementPage *postManagementPage;
     QWidget *analyticsPage;
     UserManagementPage *userManagementPage;
     QWidget *settingsPage;

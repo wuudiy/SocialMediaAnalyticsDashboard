@@ -18,7 +18,7 @@ set(CMAKE_AUTOUIC_SEARCH_PATHS
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets Sql)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Sql)
 
-# 项目源码统一维护在这里，避免 add_executable 里散落文件。
+# 项目源码统一维护在这里，后续新增文件只改这一块。
 set(PROJECT_SOURCES
     main.cpp
 
@@ -27,6 +27,8 @@ set(PROJECT_SOURCES
 
     models/user.h
     models/user.cpp
+    models/post.h
+    models/post.cpp
 
     services/appstyle.h
     services/appstyle.cpp
@@ -38,9 +40,15 @@ set(PROJECT_SOURCES
     services/sha256util.cpp
     services/userrepository.h
     services/userrepository.cpp
+    services/postrepository.h
+    services/postrepository.cpp
+    services/analyticsservice.h
+    services/analyticsservice.cpp
 
     views/dashboardpage.h
     views/dashboardpage.cpp
+    views/postmanagementpage.h
+    views/postmanagementpage.cpp
     views/loginview.h
     views/loginview.cpp
     views/mainwindow.h
@@ -56,7 +64,6 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
     qt_add_executable(${PROJECT_NAME}
         MANUAL_FINALIZATION
         ${PROJECT_SOURCES}
-        services/sha256util.h services/sha256util.cpp
     )
 else()
     add_executable(${PROJECT_NAME}

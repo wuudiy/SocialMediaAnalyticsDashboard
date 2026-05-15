@@ -2,6 +2,7 @@
 #include "ui_mainwindow.h"
 
 #include "dashboardpage.h"
+#include "postmanagementpage.h"
 #include "usermanagementpage.h"
 
 #include <QApplication>
@@ -22,12 +23,14 @@ MainWindow::MainWindow(QWidget *parent)
     pageTitleLabel(nullptr),
     userInfoLabel(nullptr),
     dashboardButton(nullptr),
+    postManagementButton(nullptr),
     analyticsButton(nullptr),
     userManagementButton(nullptr),
     settingsButton(nullptr),
     logoutButton(nullptr),
     pageStack(nullptr),
     dashboardPage(nullptr),
+    postManagementPage(nullptr),
     analyticsPage(nullptr),
     userManagementPage(nullptr),
     settingsPage(nullptr)
@@ -97,6 +100,7 @@ void MainWindow::buildUi()
     pageStack = new QStackedWidget(mainArea);
 
     dashboardPage = new DashboardPage(pageStack);
+    postManagementPage = new PostManagementPage(pageStack);
 
     analyticsPage = createPlaceholderPage(
         QStringLiteral("Analytics"),
@@ -111,6 +115,7 @@ void MainWindow::buildUi()
         );
 
     pageStack->addWidget(dashboardPage);
+    pageStack->addWidget(postManagementPage);
     pageStack->addWidget(analyticsPage);
     pageStack->addWidget(userManagementPage);
     pageStack->addWidget(settingsPage);
@@ -230,11 +235,13 @@ QWidget* MainWindow::createSideBar()
     layout->addSpacing(24);
 
     dashboardButton = createNavButton(QStringLiteral("Dashboard"));
+    postManagementButton = createNavButton(QStringLiteral("Post Data"));
     analyticsButton = createNavButton(QStringLiteral("Analytics"));
     userManagementButton = createNavButton(QStringLiteral("User Management"));
     settingsButton = createNavButton(QStringLiteral("Settings"));
 
     layout->addWidget(dashboardButton);
+    layout->addWidget(postManagementButton);
     layout->addWidget(analyticsButton);
     layout->addWidget(userManagementButton);
     layout->addWidget(settingsButton);
@@ -242,6 +249,9 @@ QWidget* MainWindow::createSideBar()
 
     connect(dashboardButton, &QPushButton::clicked,
             this, &MainWindow::showDashboardPage);
+
+    connect(postManagementButton, &QPushButton::clicked,
+            this, &MainWindow::showPostManagementPage);
 
     connect(analyticsButton, &QPushButton::clicked,
             this, &MainWindow::showAnalyticsPage);
@@ -335,10 +345,24 @@ QPushButton* MainWindow::createNavButton(const QString& text)
 // 切换到 Dashboard 页面。
 void MainWindow::showDashboardPage()
 {
+    dashboardPage->refreshDashboard();
+
     navigateTo(
         dashboardPage,
         QStringLiteral("Dashboard"),
         dashboardButton
+        );
+}
+
+// 切换到帖子数据管理页面。
+void MainWindow::showPostManagementPage()
+{
+    postManagementPage->refreshPosts();
+
+    navigateTo(
+        postManagementPage,
+        QStringLiteral("Post Data"),
+        postManagementButton
         );
 }
 
@@ -415,6 +439,7 @@ void MainWindow::setActiveNavButton(QPushButton *activeButton)
 {
     const QList<QPushButton*> buttons = {
         dashboardButton,
+        postManagementButton,
         analyticsButton,
         userManagementButton,
         settingsButton
