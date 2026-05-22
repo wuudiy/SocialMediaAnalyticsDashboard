@@ -11,6 +11,7 @@
  * - 连接 MySQL；
  * - 初始化 users 表；
  * - 初始化 posts 表；
+ * - 初始化 operation_logs 表；
  * - 创建默认管理员；
  * - 提供全局数据库连接；
  * - 保存最近一次数据库错误。
@@ -18,7 +19,8 @@
  * 不负责：
  * - 登录校验；
  * - 用户注册业务；
- * - 页面显示逻辑。
+ * - 页面显示逻辑；
+ * - 具体业务数据写入。
  */
 class DatabaseManager
 {
@@ -44,6 +46,9 @@ private:
 
     // 创建 posts 表，用来保存社交媒体帖子数据。
     static bool createPostsTable();
+
+    // 创建 operation_logs 表，用来保存用户关键操作记录。
+    static bool createOperationLogsTable();
 
     // 创建默认管理员账号。
     static bool createDefaultAdmin();

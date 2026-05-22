@@ -41,6 +41,10 @@ bool DatabaseManager::initialize()
         return false;
     }
 
+    if (!createOperationLogsTable()) {
+        return false;
+    }
+
     if (!createDefaultAdmin()) {
         return false;
     }
@@ -109,7 +113,7 @@ bool DatabaseManager::connectDatabase()
     return true;
 }
 
-// 创建 users 表
+// 创建 users 表。
 bool DatabaseManager::createUsersTable()
 {
     QSqlQuery query(database());
@@ -161,6 +165,39 @@ bool DatabaseManager::createPostsTable()
         setLastError(query.lastError().text());
 
         qDebug().noquote() << QStringLiteral("Create posts table failed: %1")
+                                  .arg(query.lastError().text());
+
+        return false;
+    }
+
+    return true;
+}
+
+// 创建 operation_logs 表。
+// 这个表只记录关键操作，不做复杂日志级别，符合期末项目的简化要求。
+bool DatabaseManager::createOperationLogsTable()
+{
+    QSqlQuery query(database());
+
+    const QString sql = QStringLiteral(
+        "CREATE TABLE IF NOT EXISTS operation_logs ("
+        "    log_id INT PRIMARY KEY AUTO_INCREMENT,"
+        "    user_id INT NULL,"
+        "    username VARCHAR(255) NOT NULL,"
+        "    action VARCHAR(50) NOT NULL,"
+        "    detail TEXT,"
+        "    result VARCHAR(20) NOT NULL DEFAULT 'success',"
+        "    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
+        "    INDEX idx_operation_logs_username (username),"
+        "    INDEX idx_operation_logs_action (action),"
+        "    INDEX idx_operation_logs_created_at (created_at)"
+        ")"
+        );
+
+    if (!query.exec(sql)) {
+        setLastError(query.lastError().text());
+
+        qDebug().noquote() << QStringLiteral("Create operation_logs table failed: %1")
                                   .arg(query.lastError().text());
 
         return false;

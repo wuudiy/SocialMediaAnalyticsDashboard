@@ -44,6 +44,8 @@ set(PROJECT_SOURCES
     services/postrepository.cpp
     services/analyticsservice.h
     services/analyticsservice.cpp
+    services/logservice.h
+    services/logservice.cpp
 
     views/dashboardpage.h
     views/dashboardpage.cpp

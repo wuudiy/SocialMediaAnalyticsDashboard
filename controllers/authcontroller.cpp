@@ -16,7 +16,8 @@ AuthController::AuthController()
  * 4. 检查账号是否启用；
  * 5. 使用 SHA-256 校验密码；
  * 6. 如果是旧 DES 密码，登录成功后自动升级成 SHA-256；
- * 7. 保存当前用户。
+ * 7. 保存当前用户；
+ * 8. 写入登录日志。
  */
 
 // 登录用户：校验输入、查询用户、检查状态、比对密码。
@@ -28,6 +29,14 @@ bool AuthController::loginUser(const QString& username,
     const QString trimmedPassword = password.trimmed();
 
     if (!validateLoginInput(trimmedUsername, trimmedPassword, message)) {
+        logService.writeLog(
+            -1,
+            trimmedUsername,
+            QStringLiteral("login"),
+            message,
+            QStringLiteral("failed")
+            );
+
         return false;
     }
 
@@ -35,16 +44,43 @@ bool AuthController::loginUser(const QString& username,
 
     if (!userFromDatabase.isValid()) {
         message = "User does not exist.";
+
+        logService.writeLog(
+            -1,
+            trimmedUsername,
+            QStringLiteral("login"),
+            QStringLiteral("Login failed: user does not exist."),
+            QStringLiteral("failed")
+            );
+
         return false;
     }
 
     if (!userFromDatabase.isActive()) {
         message = "This account is disabled.";
+
+        logService.writeLog(
+            userFromDatabase.userId,
+            trimmedUsername,
+            QStringLiteral("login"),
+            QStringLiteral("Login failed: account is disabled."),
+            QStringLiteral("failed")
+            );
+
         return false;
     }
 
     if (!verifyPasswordAndUpgradeIfNeeded(userFromDatabase, trimmedPassword)) {
         message = "Incorrect password.";
+
+        logService.writeLog(
+            userFromDatabase.userId,
+            trimmedUsername,
+            QStringLiteral("login"),
+            QStringLiteral("Login failed: incorrect password."),
+            QStringLiteral("failed")
+            );
+
         return false;
     }
 
@@ -57,6 +93,15 @@ bool AuthController::loginUser(const QString& username,
     currentUser.password = SHA256Util::hashPassword(trimmedPassword);
 
     message = "Login successful.";
+
+    logService.writeLog(
+        currentUser.userId,
+        currentUser.username,
+        QStringLiteral("login"),
+        QStringLiteral("Login successful. Role: %1").arg(currentUser.role),
+        QStringLiteral("success")
+        );
+
     return true;
 }
 
@@ -71,8 +116,22 @@ bool AuthController::registerUser(const User& operatorUser,
     const QString trimmedPassword = password.trimmed();
     const QString normalizedRole = role.trimmed().toLower();
 
+    const QString operatorUsername = operatorUser.username.trimmed().isEmpty()
+                                         ? QStringLiteral("unknown")
+                                         : operatorUser.username.trimmed();
+
     if (!canCreateUser(operatorUser)) {
         message = "Only admin can register new users.";
+
+        logService.writeLog(
+            operatorUser.userId,
+            operatorUsername,
+            QStringLiteral("create_user"),
+            QStringLiteral("Create user failed: permission denied. Target username: %1")
+                .arg(trimmedUsername),
+            QStringLiteral("failed")
+            );
+
         return false;
     }
 
@@ -80,11 +139,30 @@ bool AuthController::registerUser(const User& operatorUser,
                                trimmedPassword,
                                normalizedRole,
                                message)) {
+        logService.writeLog(
+            operatorUser.userId,
+            operatorUsername,
+            QStringLiteral("create_user"),
+            QStringLiteral("Create user failed: %1 Target username: %2")
+                .arg(message, trimmedUsername),
+            QStringLiteral("failed")
+            );
+
         return false;
     }
 
     if (userRepository.usernameExists(trimmedUsername)) {
         message = "The username already exists.";
+
+        logService.writeLog(
+            operatorUser.userId,
+            operatorUsername,
+            QStringLiteral("create_user"),
+            QStringLiteral("Create user failed: username already exists. Target username: %1")
+                .arg(trimmedUsername),
+            QStringLiteral("failed")
+            );
+
         return false;
     }
 
@@ -99,10 +177,30 @@ bool AuthController::registerUser(const User& operatorUser,
 
     if (!inserted) {
         message = "Failed to register user. Please check the database.";
+
+        logService.writeLog(
+            operatorUser.userId,
+            operatorUsername,
+            QStringLiteral("create_user"),
+            QStringLiteral("Create user failed: database insert failed. Target username: %1, role: %2")
+                .arg(trimmedUsername, normalizedRole),
+            QStringLiteral("failed")
+            );
+
         return false;
     }
 
     message = "User registered successfully.";
+
+    logService.writeLog(
+        operatorUser.userId,
+        operatorUsername,
+        QStringLiteral("create_user"),
+        QStringLiteral("Create user successful. Target username: %1, role: %2")
+            .arg(trimmedUsername, normalizedRole),
+        QStringLiteral("success")
+        );
+
     return true;
 }
 
