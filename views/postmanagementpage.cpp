@@ -30,6 +30,7 @@
 
 PostManagementPage::PostManagementPage(QWidget *parent)
     : QWidget(parent),
+    editingPostId(-1),
     messageLabel(nullptr),
     platformComboBox(nullptr),
     accountLineEdit(nullptr),
@@ -40,6 +41,7 @@ PostManagementPage::PostManagementPage(QWidget *parent)
     sharesSpinBox(nullptr),
     viewsSpinBox(nullptr),
     addButton(nullptr),
+    updateButton(nullptr),
     clearButton(nullptr),
     importCsvButton(nullptr),
     searchPlatformComboBox(nullptr),
@@ -54,14 +56,11 @@ PostManagementPage::PostManagementPage(QWidget *parent)
     refreshPosts();
 }
 
-// 主窗口登录成功后会调用这个函数，把当前登录用户传进帖子页面。
-// 这样新增、删除、导入日志里就能记录是谁操作的。
 void PostManagementPage::setCurrentUser(const User& user)
 {
     currentUser = user;
 }
 
-// 创建页面：上方是新增表单，下方是查询和表格。
 void PostManagementPage::buildUi()
 {
     auto *rootLayout = new QVBoxLayout(this);
@@ -72,7 +71,7 @@ void PostManagementPage::buildUi()
     titleLabel->setObjectName(QStringLiteral("pageTitle"));
 
     auto *subtitleLabel = new QLabel(
-        QStringLiteral("Add, search, delete or import local social media post data.")
+        QStringLiteral("Add, search, delete, import or double-click a row to update local social media post data.")
         );
     subtitleLabel->setObjectName(QStringLiteral("pageSubtitle"));
 
@@ -91,6 +90,9 @@ void PostManagementPage::buildUi()
     connect(addButton, &QPushButton::clicked,
             this, &PostManagementPage::onAddPostClicked);
 
+    connect(updateButton, &QPushButton::clicked,
+            this, &PostManagementPage::onUpdatePostClicked);
+
     connect(clearButton, &QPushButton::clicked,
             this, &PostManagementPage::resetForm);
 
@@ -108,6 +110,9 @@ void PostManagementPage::buildUi()
 
     connect(refreshButton, &QPushButton::clicked,
             this, &PostManagementPage::refreshPosts);
+
+    connect(postTable, &QTableWidget::cellDoubleClicked,
+            this, &PostManagementPage::onTableCellDoubleClicked);
 }
 
 void PostManagementPage::applyStyleSheet()
@@ -153,6 +158,22 @@ void PostManagementPage::applyStyleSheet()
         "}"
         "QPushButton#primaryButton:hover {"
         "    background: #1D4ED8;"
+        "}"
+        "QPushButton#successButton {"
+        "    min-height: 34px;"
+        "    background: #16A34A;"
+        "    color: #FFFFFF;"
+        "    border: none;"
+        "    border-radius: 8px;"
+        "    padding: 0 16px;"
+        "    font-weight: 600;"
+        "}"
+        "QPushButton#successButton:hover {"
+        "    background: #15803D;"
+        "}"
+        "QPushButton#successButton:disabled {"
+        "    background: #9CA3AF;"
+        "    color: #F9FAFB;"
         "}"
         "QPushButton#secondaryButton {"
         "    min-height: 34px;"
@@ -244,6 +265,11 @@ QFrame* PostManagementPage::createFormCard()
     addButton->setObjectName(QStringLiteral("primaryButton"));
     addButton->setCursor(Qt::PointingHandCursor);
 
+    updateButton = new QPushButton(QStringLiteral("Update Selected"));
+    updateButton->setObjectName(QStringLiteral("successButton"));
+    updateButton->setCursor(Qt::PointingHandCursor);
+    updateButton->setEnabled(false);
+
     clearButton = new QPushButton(QStringLiteral("Clear"));
     clearButton->setObjectName(QStringLiteral("secondaryButton"));
     clearButton->setCursor(Qt::PointingHandCursor);
@@ -264,6 +290,7 @@ QFrame* PostManagementPage::createFormCard()
     auto *buttonLayout = new QHBoxLayout();
     buttonLayout->setSpacing(10);
     buttonLayout->addWidget(addButton);
+    buttonLayout->addWidget(updateButton);
     buttonLayout->addWidget(clearButton);
     buttonLayout->addWidget(importCsvButton);
     buttonLayout->addStretch();
@@ -345,7 +372,6 @@ void PostManagementPage::addFormRow(QGridLayout *layout,
         return;
     }
 
-    // 同一行放两组字段：左边一组，右边一组。
     const int baseColumn = (layout->itemAtPosition(row, 0) == nullptr) ? 0 : 2;
 
     layout->addWidget(createFieldLabel(labelText), row, baseColumn);
@@ -424,12 +450,12 @@ void PostManagementPage::fillTable(const QList<Post>& posts)
         }
     }
 
-    setMessage(QStringLiteral("Loaded %1 post records.").arg(posts.size()));
+    setMessage(QStringLiteral("Loaded %1 post records. Double-click one row to edit it.").arg(posts.size()));
 }
 
 void PostManagementPage::onAddPostClicked()
 {
-    const Post post = readPostFromForm();
+    Post post = readPostFromForm();
 
     QString message;
     if (!validatePostInput(post, message)) {
@@ -480,6 +506,70 @@ void PostManagementPage::onAddPostClicked()
     setMessage(QStringLiteral("Post added successfully."));
 }
 
+void PostManagementPage::onUpdatePostClicked()
+{
+    if (editingPostId <= 0) {
+        QMessageBox::information(
+            this,
+            QStringLiteral("No Editing Post"),
+            QStringLiteral("Please double-click one row in the table first.")
+            );
+
+        return;
+    }
+
+    Post post = readPostFromForm();
+    post.postId = editingPostId;
+
+    QString message;
+    if (!validatePostInput(post, message)) {
+        setMessage(message, true);
+
+        writePostOperationLog(
+            QStringLiteral("update_post"),
+            QStringLiteral("Update post failed: %1 Post ID: %2")
+                .arg(message)
+                .arg(editingPostId),
+            QStringLiteral("failed")
+            );
+
+        QMessageBox::warning(this, QStringLiteral("Invalid Input"), message);
+        return;
+    }
+
+    if (!postRepository.updatePost(post)) {
+        const QString errorMessage = QStringLiteral("Failed to update post. The record may have been deleted.");
+        setMessage(errorMessage, true);
+
+        writePostOperationLog(
+            QStringLiteral("update_post"),
+            QStringLiteral("Update post failed. Post ID: %1").arg(editingPostId),
+            QStringLiteral("failed")
+            );
+
+        QMessageBox::warning(this, QStringLiteral("Update Failed"), errorMessage);
+        return;
+    }
+
+    writePostOperationLog(
+        QStringLiteral("update_post"),
+        QStringLiteral("Update post successful. Post ID: %1, Platform: %2, Account: %3, Date: %4, Likes: %5, Comments: %6, Shares: %7, Views: %8")
+            .arg(post.postId)
+            .arg(post.platform,
+                 post.accountName,
+                 post.publishDate.toString(QStringLiteral("yyyy-MM-dd")))
+            .arg(post.likes)
+            .arg(post.comments)
+            .arg(post.shares)
+            .arg(post.views),
+        QStringLiteral("success")
+        );
+
+    resetForm();
+    refreshPosts();
+    setMessage(QStringLiteral("Post updated successfully."));
+}
+
 void PostManagementPage::onDeletePostClicked()
 {
     const int postId = selectedPostId();
@@ -521,6 +611,10 @@ void PostManagementPage::onDeletePostClicked()
         QStringLiteral("Delete post successful. Post ID: %1").arg(postId),
         QStringLiteral("success")
         );
+
+    if (editingPostId == postId) {
+        clearEditingState();
+    }
 
     refreshPosts();
     setMessage(QStringLiteral("Post deleted successfully."));
@@ -593,7 +687,6 @@ void PostManagementPage::onImportCsvClicked()
 
         const QStringList fields = splitCsvLine(line);
 
-        // 第一行通常是表头。这里同时支持标准帖子 CSV 和 Bilibili 趋势 CSV。
         if (csvFormat == CsvFormat::Unknown) {
             csvFormat = detectCsvFormat(fields);
 
@@ -601,11 +694,9 @@ void PostManagementPage::onImportCsvClicked()
                 continue;
             }
 
-            // 没有表头时，默认按我们自己的 8 列帖子格式处理。
             csvFormat = CsvFormat::StandardPost;
         }
 
-        // Bilibili 导出的第二行是“累计”，它不是某一天的数据，不能当帖子记录导入。
         if (csvFormat == CsvFormat::BilibiliTrend
             && cleanCsvField(fields.value(0)) == QStringLiteral("累计")) {
             continue;
@@ -661,6 +752,47 @@ void PostManagementPage::onImportCsvClicked()
     setMessage(resultMessage, hasFailedRows);
 }
 
+void PostManagementPage::onTableCellDoubleClicked(int row, int column)
+{
+    Q_UNUSED(column)
+
+    if (row < 0) {
+        return;
+    }
+
+    const QTableWidgetItem *idItem = postTable->item(row, 0);
+
+    if (!idItem) {
+        return;
+    }
+
+    const int postId = idItem->text().toInt();
+
+    if (postId <= 0) {
+        return;
+    }
+
+    const Post post = postRepository.findPostById(postId);
+
+    if (!post.isValid()) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("Load Failed"),
+            QStringLiteral("The selected post record does not exist.")
+            );
+
+        refreshPosts();
+        return;
+    }
+
+    loadPostToForm(post);
+
+    setMessage(
+        QStringLiteral("Editing post ID %1. Modify the form and click Update Selected.")
+            .arg(post.postId)
+        );
+}
+
 Post PostManagementPage::readPostFromForm() const
 {
     Post post;
@@ -714,6 +846,45 @@ void PostManagementPage::resetForm()
     sharesSpinBox->setValue(0);
     viewsSpinBox->setValue(0);
     accountLineEdit->setFocus();
+
+    clearEditingState();
+}
+
+void PostManagementPage::loadPostToForm(const Post& post)
+{
+    editingPostId = post.postId;
+
+    int platformIndex = platformComboBox->findText(post.platform);
+
+    if (platformIndex < 0) {
+        platformComboBox->addItem(post.platform);
+        platformIndex = platformComboBox->findText(post.platform);
+    }
+
+    platformComboBox->setCurrentIndex(platformIndex);
+    accountLineEdit->setText(post.accountName);
+    contentLineEdit->setText(post.content);
+    publishDateEdit->setDate(post.publishDate);
+    likesSpinBox->setValue(post.likes);
+    commentsSpinBox->setValue(post.comments);
+    sharesSpinBox->setValue(post.shares);
+    viewsSpinBox->setValue(post.views);
+
+    updateButton->setEnabled(true);
+    addButton->setEnabled(false);
+}
+
+void PostManagementPage::clearEditingState()
+{
+    editingPostId = -1;
+
+    if (updateButton) {
+        updateButton->setEnabled(false);
+    }
+
+    if (addButton) {
+        addButton->setEnabled(true);
+    }
 }
 
 int PostManagementPage::selectedPostId() const
@@ -777,7 +948,6 @@ QString PostManagementPage::cleanCsvField(const QString& value) const
 {
     QString field = value.trimmed();
 
-    // 有些 CSV 第一列前面会带 UTF-8 BOM，不去掉会影响表头识别。
     if (!field.isEmpty() && field.at(0).unicode() == 0xFEFF) {
         field.remove(0, 1);
     }
@@ -794,7 +964,6 @@ QString PostManagementPage::cleanCsvField(const QString& value) const
 
 QStringList PostManagementPage::splitCsvLine(const QString& line) const
 {
-    // 这里比普通 split(',') 稍微稳一点：可以处理带英文逗号的引号字段。
     QStringList fields;
     QString current;
     bool inQuotes = false;
@@ -825,7 +994,6 @@ QDate PostManagementPage::parseCsvDate(const QString& value) const
 {
     QString dateText = cleanCsvField(value);
 
-    // 如果以后 CSV 中出现“2026/05/01 12:00:00”，这里只取日期部分。
     if (dateText.contains(QChar(' '))) {
         dateText = dateText.section(QChar(' '), 0, 0);
     }
@@ -914,11 +1082,10 @@ bool PostManagementPage::buildPostFromCsvFields(const QStringList& fields,
         post.accountName = QStringLiteral("Bilibili Video");
         post.content = QStringLiteral("Bilibili playback trend - %1").arg(dateText);
         post.publishDate = parseCsvDate(dateText);
-        post.views = csvNumber(fields.at(1));       // 播放量
-        post.likes = csvNumber(fields.at(4));       // 点赞
-        post.comments = csvNumber(fields.at(5))     // 弹幕
-                        + csvNumber(fields.at(6));  // 评论
-        post.shares = csvNumber(fields.at(7));      // 分享
+        post.views = csvNumber(fields.at(1));
+        post.likes = csvNumber(fields.at(4));
+        post.comments = csvNumber(fields.at(5)) + csvNumber(fields.at(6));
+        post.shares = csvNumber(fields.at(7));
 
         return validatePostInput(post, message);
     }
