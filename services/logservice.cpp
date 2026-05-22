@@ -17,6 +17,29 @@ bool LogService::writeLog(int userId,
                           const QString& detail,
                           const QString& result)
 {
+    const QString trimmedUsername = username.trimmed().isEmpty()
+    ? QStringLiteral("system")
+    : username.trimmed();
+
+    const QString trimmedAction = action.trimmed();
+
+    const QString trimmedResult = result.trimmed().isEmpty()
+                                      ? QStringLiteral("success")
+                                      : result.trimmed();
+
+    if (trimmedAction.isEmpty()) {
+        qDebug() << "Write operation log failed: action is empty";
+        return false;
+    }
+
+    QVariant userIdValue;
+
+    if (userId > 0) {
+        userIdValue = userId;
+    } else {
+        userIdValue = QVariant();
+    }
+
     QSqlQuery query(DatabaseManager::database());
 
     query.prepare(
@@ -28,15 +51,11 @@ bool LogService::writeLog(int userId,
             )
         );
 
-    query.bindValue(QStringLiteral(":user_id"), userId > 0 ? userId : QVariant());
-    query.bindValue(QStringLiteral(":username"), username.trimmed().isEmpty()
-                                                     ? QStringLiteral("system")
-                                                     : username.trimmed());
-    query.bindValue(QStringLiteral(":action"), action.trimmed());
+    query.bindValue(QStringLiteral(":user_id"), userIdValue);
+    query.bindValue(QStringLiteral(":username"), trimmedUsername);
+    query.bindValue(QStringLiteral(":action"), trimmedAction);
     query.bindValue(QStringLiteral(":detail"), detail.trimmed());
-    query.bindValue(QStringLiteral(":result"), result.trimmed().isEmpty()
-                                                   ? QStringLiteral("success")
-                                                   : result.trimmed());
+    query.bindValue(QStringLiteral(":result"), trimmedResult);
 
     if (!query.exec()) {
         qDebug() << "Write operation log failed:" << query.lastError().text();
@@ -61,21 +80,34 @@ bool LogService::writeSystemLog(const QString& action,
 
 QList<OperationLog> LogService::findLogs(const QString& usernameKeyword,
                                          const QString& action,
+                                         const QDateTime& startTime,
+                                         const QDateTime& endTime,
                                          int limit)
 {
     QList<OperationLog> logs;
+
+    const QString trimmedUsernameKeyword = usernameKeyword.trimmed();
+    const QString trimmedAction = action.trimmed();
 
     QString sql =
         "SELECT log_id, user_id, username, action, detail, result, created_at "
         "FROM operation_logs "
         "WHERE 1 = 1 ";
 
-    if (!usernameKeyword.trimmed().isEmpty()) {
+    if (!trimmedUsernameKeyword.isEmpty()) {
         sql += "AND username LIKE :username ";
     }
 
-    if (!action.trimmed().isEmpty()) {
+    if (!trimmedAction.isEmpty()) {
         sql += "AND action = :action ";
+    }
+
+    if (startTime.isValid()) {
+        sql += "AND created_at >= :start_time ";
+    }
+
+    if (endTime.isValid()) {
+        sql += "AND created_at <= :end_time ";
     }
 
     sql += QStringLiteral("ORDER BY created_at DESC, log_id DESC LIMIT %1")
@@ -84,15 +116,23 @@ QList<OperationLog> LogService::findLogs(const QString& usernameKeyword,
     QSqlQuery query(DatabaseManager::database());
     query.prepare(sql);
 
-    if (!usernameKeyword.trimmed().isEmpty()) {
+    if (!trimmedUsernameKeyword.isEmpty()) {
         query.bindValue(
             QStringLiteral(":username"),
-            QStringLiteral("%%1%").arg(usernameKeyword.trimmed())
+            QStringLiteral("%%1%").arg(trimmedUsernameKeyword)
             );
     }
 
-    if (!action.trimmed().isEmpty()) {
-        query.bindValue(QStringLiteral(":action"), action.trimmed());
+    if (!trimmedAction.isEmpty()) {
+        query.bindValue(QStringLiteral(":action"), trimmedAction);
+    }
+
+    if (startTime.isValid()) {
+        query.bindValue(QStringLiteral(":start_time"), startTime);
+    }
+
+    if (endTime.isValid()) {
+        query.bindValue(QStringLiteral(":end_time"), endTime);
     }
 
     if (!query.exec()) {

@@ -6,6 +6,7 @@
 #include <QDateEdit>
 #include <QFile>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QFrame>
 #include <QGridLayout>
 #include <QHeaderView>
@@ -51,6 +52,13 @@ PostManagementPage::PostManagementPage(QWidget *parent)
 {
     buildUi();
     refreshPosts();
+}
+
+// 主窗口登录成功后会调用这个函数，把当前登录用户传进帖子页面。
+// 这样新增、删除、导入日志里就能记录是谁操作的。
+void PostManagementPage::setCurrentUser(const User& user)
+{
+    currentUser = user;
 }
 
 // 创建页面：上方是新增表单，下方是查询和表格。
@@ -426,15 +434,46 @@ void PostManagementPage::onAddPostClicked()
     QString message;
     if (!validatePostInput(post, message)) {
         setMessage(message, true);
+
+        writePostOperationLog(
+            QStringLiteral("add_post"),
+            QStringLiteral("Add post failed: %1").arg(message),
+            QStringLiteral("failed")
+            );
+
         QMessageBox::warning(this, QStringLiteral("Invalid Input"), message);
         return;
     }
 
     if (!postRepository.insertPost(post)) {
-        setMessage(QStringLiteral("Failed to add post. Please check the database."), true);
+        const QString errorMessage = QStringLiteral("Failed to add post. Please check the database.");
+        setMessage(errorMessage, true);
+
+        writePostOperationLog(
+            QStringLiteral("add_post"),
+            QStringLiteral("Add post failed: database insert failed. Platform: %1, Account: %2, Date: %3")
+                .arg(post.platform,
+                     post.accountName,
+                     post.publishDate.toString(QStringLiteral("yyyy-MM-dd"))),
+            QStringLiteral("failed")
+            );
+
         QMessageBox::warning(this, QStringLiteral("Add Failed"), messageLabel->text());
         return;
     }
+
+    writePostOperationLog(
+        QStringLiteral("add_post"),
+        QStringLiteral("Add post successful. Platform: %1, Account: %2, Date: %3, Likes: %4, Comments: %5, Shares: %6, Views: %7")
+            .arg(post.platform,
+                 post.accountName,
+                 post.publishDate.toString(QStringLiteral("yyyy-MM-dd")))
+            .arg(post.likes)
+            .arg(post.comments)
+            .arg(post.shares)
+            .arg(post.views),
+        QStringLiteral("success")
+        );
 
     resetForm();
     refreshPosts();
@@ -466,9 +505,22 @@ void PostManagementPage::onDeletePostClicked()
 
     if (!postRepository.deletePostById(postId)) {
         setMessage(QStringLiteral("Failed to delete post."), true);
+
+        writePostOperationLog(
+            QStringLiteral("delete_post"),
+            QStringLiteral("Delete post failed. Post ID: %1").arg(postId),
+            QStringLiteral("failed")
+            );
+
         QMessageBox::warning(this, QStringLiteral("Delete Failed"), messageLabel->text());
         return;
     }
+
+    writePostOperationLog(
+        QStringLiteral("delete_post"),
+        QStringLiteral("Delete post successful. Post ID: %1").arg(postId),
+        QStringLiteral("success")
+        );
 
     refreshPosts();
     setMessage(QStringLiteral("Post deleted successfully."));
@@ -502,6 +554,13 @@ void PostManagementPage::onImportCsvClicked()
     QFile file(fileName);
 
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        writePostOperationLog(
+            QStringLiteral("import_csv"),
+            QStringLiteral("CSV import failed: cannot open file. File: %1")
+                .arg(QFileInfo(fileName).fileName()),
+            QStringLiteral("failed")
+            );
+
         QMessageBox::warning(
             this,
             QStringLiteral("Import Failed"),
@@ -585,7 +644,21 @@ void PostManagementPage::onImportCsvClicked()
         resultMessage += QStringLiteral("\n") + errorDetails.join(QStringLiteral("\n"));
     }
 
-    setMessage(resultMessage, failedCount > 0);
+    const bool hasFailedRows = failedCount > 0;
+
+    writePostOperationLog(
+        QStringLiteral("import_csv"),
+        QStringLiteral("CSV import finished. File: %1, Success: %2, Failed: %3%4")
+            .arg(QFileInfo(fileName).fileName())
+            .arg(successCount)
+            .arg(failedCount)
+            .arg(errorDetails.isEmpty()
+                     ? QString()
+                     : QStringLiteral(", Errors: %1").arg(errorDetails.join(QStringLiteral(" | ")))),
+        hasFailedRows ? QStringLiteral("failed") : QStringLiteral("success")
+        );
+
+    setMessage(resultMessage, hasFailedRows);
 }
 
 Post PostManagementPage::readPostFromForm() const
@@ -670,6 +743,33 @@ void PostManagementPage::setMessage(const QString& message,
         error
             ? QStringLiteral("color: #DC2626;")
             : QStringLiteral("color: #374151;")
+        );
+}
+
+int PostManagementPage::currentOperatorId() const
+{
+    return currentUser.isValid() ? currentUser.userId : -1;
+}
+
+QString PostManagementPage::currentOperatorName() const
+{
+    if (currentUser.isValid() && !currentUser.username.trimmed().isEmpty()) {
+        return currentUser.username.trimmed();
+    }
+
+    return QStringLiteral("unknown");
+}
+
+void PostManagementPage::writePostOperationLog(const QString& action,
+                                               const QString& detail,
+                                               const QString& result)
+{
+    logService.writeLog(
+        currentOperatorId(),
+        currentOperatorName(),
+        action,
+        detail,
+        result
         );
 }
 

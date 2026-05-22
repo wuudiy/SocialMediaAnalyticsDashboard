@@ -2,6 +2,8 @@
 #define POSTMANAGEMENTPAGE_H
 
 #include "../models/post.h"
+#include "../models/user.h"
+#include "../services/logservice.h"
 #include "../services/postrepository.h"
 
 #include <QWidget>
@@ -19,12 +21,19 @@ class QTableWidget;
 
 /*
  * 帖子数据管理页面。
+ *
  * 负责：
  * - 新增社交媒体帖子数据；
  * - 按平台和关键词查询；
  * - 表格展示帖子列表；
  * - 删除选中的帖子；
- * - 从 CSV 文件批量导入数据。
+ * - 从 CSV 文件批量导入数据；
+ * - 记录帖子新增、删除、CSV 导入日志。
+ *
+ * 不负责：
+ * - 统计分析计算；
+ * - Dashboard 展示；
+ * - 用户登录验证。
  */
 class PostManagementPage : public QWidget
 {
@@ -32,6 +41,9 @@ class PostManagementPage : public QWidget
 
 public:
     explicit PostManagementPage(QWidget *parent = nullptr);
+
+    // 主窗口在登录成功后调用，用于记录当前操作人。
+    void setCurrentUser(const User& user);
 
 public slots:
     // 主窗口切换到本页面时调用，保证表格显示最新数据。
@@ -96,6 +108,17 @@ private:
     void setMessage(const QString& message,
                     bool error = false);
 
+    // 获取当前操作人 ID。未登录或未传入时返回 -1。
+    int currentOperatorId() const;
+
+    // 获取当前操作人用户名。未登录或未传入时返回 unknown。
+    QString currentOperatorName() const;
+
+    // 统一写入帖子模块日志，避免每个槽函数重复写 userId 和 username。
+    void writePostOperationLog(const QString& action,
+                               const QString& detail,
+                               const QString& result = QStringLiteral("success"));
+
     // 清理 CSV 字段，比如去掉 BOM、引号和多余空格。
     QString cleanCsvField(const QString& value) const;
 
@@ -114,9 +137,11 @@ private:
                                 Post& post,
                                 QString& message) const;
 
-
 private:
+    User currentUser;
+
     PostRepository postRepository;
+    LogService logService;
 
     QLabel *messageLabel;
 

@@ -2,6 +2,7 @@
 #include "ui_mainwindow.h"
 
 #include "dashboardpage.h"
+#include "logpage.h"
 #include "postmanagementpage.h"
 #include "usermanagementpage.h"
 
@@ -26,6 +27,7 @@ MainWindow::MainWindow(QWidget *parent)
     postManagementButton(nullptr),
     analyticsButton(nullptr),
     userManagementButton(nullptr),
+    operationLogsButton(nullptr),
     settingsButton(nullptr),
     logoutButton(nullptr),
     pageStack(nullptr),
@@ -33,6 +35,7 @@ MainWindow::MainWindow(QWidget *parent)
     postManagementPage(nullptr),
     analyticsPage(nullptr),
     userManagementPage(nullptr),
+    logPage(nullptr),
     settingsPage(nullptr)
 {
     ui->setupUi(this);
@@ -66,6 +69,7 @@ void MainWindow::setCurrentUser(const User& user)
         );
 
     dashboardPage->setCurrentUser(currentUser);
+    postManagementPage->setCurrentUser(currentUser);
     userManagementPage->setCurrentUser(currentUser);
 
     updateRoleAccess();
@@ -108,6 +112,7 @@ void MainWindow::buildUi()
         );
 
     userManagementPage = new UserManagementPage(pageStack);
+    logPage = new LogPage(pageStack);
 
     settingsPage = createPlaceholderPage(
         QStringLiteral("Settings"),
@@ -118,6 +123,7 @@ void MainWindow::buildUi()
     pageStack->addWidget(postManagementPage);
     pageStack->addWidget(analyticsPage);
     pageStack->addWidget(userManagementPage);
+    pageStack->addWidget(logPage);
     pageStack->addWidget(settingsPage);
 
     mainLayout->addWidget(pageStack, 1);
@@ -238,12 +244,14 @@ QWidget* MainWindow::createSideBar()
     postManagementButton = createNavButton(QStringLiteral("Post Data"));
     analyticsButton = createNavButton(QStringLiteral("Analytics"));
     userManagementButton = createNavButton(QStringLiteral("User Management"));
+    operationLogsButton = createNavButton(QStringLiteral("Operation Logs"));
     settingsButton = createNavButton(QStringLiteral("Settings"));
 
     layout->addWidget(dashboardButton);
     layout->addWidget(postManagementButton);
     layout->addWidget(analyticsButton);
     layout->addWidget(userManagementButton);
+    layout->addWidget(operationLogsButton);
     layout->addWidget(settingsButton);
     layout->addStretch();
 
@@ -258,6 +266,9 @@ QWidget* MainWindow::createSideBar()
 
     connect(userManagementButton, &QPushButton::clicked,
             this, &MainWindow::showUserManagementPage);
+
+    connect(operationLogsButton, &QPushButton::clicked,
+            this, &MainWindow::showLogPage);
 
     connect(settingsButton, &QPushButton::clicked,
             this, &MainWindow::showSettingsPage);
@@ -395,6 +406,27 @@ void MainWindow::showUserManagementPage()
         userManagementButton
         );
 }
+// 切换到系统日志查看界面，需要先做管理员权限查看
+void MainWindow::showLogPage()
+{
+    if (!isAdminUser()) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("Access Denied"),
+            QStringLiteral("Only admin users can open Operation Logs.")
+            );
+
+        return;
+    }
+
+    logPage->refreshLogs();
+
+    navigateTo(
+        logPage,
+        QStringLiteral("Operation Logs"),
+        operationLogsButton
+        );
+}
 
 // 切换到 Settings 页面。
 void MainWindow::showSettingsPage()
@@ -442,6 +474,7 @@ void MainWindow::setActiveNavButton(QPushButton *activeButton)
         postManagementButton,
         analyticsButton,
         userManagementButton,
+        operationLogsButton,
         settingsButton
     };
 
@@ -458,7 +491,6 @@ void MainWindow::setActiveNavButton(QPushButton *activeButton)
                 : QStringLiteral("navButton")
             );
 
-        // objectName 改变后手动刷新 QSS，否则高亮样式可能不会立即生效。
         button->style()->unpolish(button);
         button->style()->polish(button);
         button->update();
@@ -468,15 +500,19 @@ void MainWindow::setActiveNavButton(QPushButton *activeButton)
 // 根据当前用户角色刷新主界面可用入口。
 void MainWindow::updateRoleAccess()
 {
-    const bool canManageUsers = isAdminUser();
+    const bool canUseAdminPages = isAdminUser();
 
-    userManagementButton->setVisible(canManageUsers);
+    userManagementButton->setVisible(canUseAdminPages);
+    operationLogsButton->setVisible(canUseAdminPages);
 
-    // 防止普通用户因为后续代码跳转而停留在用户管理页。
-    if (!canManageUsers && pageStack->currentWidget() == userManagementPage) {
+    // 防止普通用户因为代码跳转而停留在管理员页面。
+    if (!canUseAdminPages
+        && (pageStack->currentWidget() == userManagementPage
+            || pageStack->currentWidget() == logPage)) {
         showDashboardPage();
     }
 }
+
 
 // 管理员判断统一收口，避免到处直接比较 role 字符串。
 bool MainWindow::isAdminUser() const
