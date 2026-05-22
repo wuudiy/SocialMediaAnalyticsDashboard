@@ -9,6 +9,7 @@
 #include <QFrame>
 #include <QGridLayout>
 #include <QHeaderView>
+#include <QIODevice>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
@@ -19,6 +20,11 @@
 #include <QTableWidgetItem>
 #include <QTextStream>
 #include <QtGlobal>
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+#include <QStringConverter>
+#endif
+
 #include <QVBoxLayout>
 
 PostManagementPage::PostManagementPage(QWidget *parent)
@@ -506,13 +512,17 @@ void PostManagementPage::onImportCsvClicked()
 
     QTextStream stream(&file);
 
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    stream.setEncoding(QStringConverter::Utf8);
+#else
     stream.setCodec("UTF-8");
 #endif
 
     int lineNumber = 0;
     int successCount = 0;
     int failedCount = 0;
+    CsvFormat csvFormat = CsvFormat::Unknown;
+    QStringList errorDetails;
 
     while (!stream.atEnd()) {
         const QString line = stream.readLine().trimmed();
@@ -522,17 +532,43 @@ void PostManagementPage::onImportCsvClicked()
             continue;
         }
 
-        // 第一行如果是表头，就跳过。
-        if (lineNumber == 1 && line.toLower().contains(QStringLiteral("platform"))) {
+        const QStringList fields = splitCsvLine(line);
+
+        // 第一行通常是表头。这里同时支持标准帖子 CSV 和 Bilibili 趋势 CSV。
+        if (csvFormat == CsvFormat::Unknown) {
+            csvFormat = detectCsvFormat(fields);
+
+            if (csvFormat != CsvFormat::Unknown) {
+                continue;
+            }
+
+            // 没有表头时，默认按我们自己的 8 列帖子格式处理。
+            csvFormat = CsvFormat::StandardPost;
+        }
+
+        // Bilibili 导出的第二行是“累计”，它不是某一天的数据，不能当帖子记录导入。
+        if (csvFormat == CsvFormat::BilibiliTrend
+            && cleanCsvField(fields.value(0)) == QStringLiteral("累计")) {
             continue;
         }
 
         Post post;
         QString message;
 
-        if (!buildPostFromCsvFields(splitCsvLine(line), post, message)
+        if (!buildPostFromCsvFields(fields, csvFormat, post, message)
             || !postRepository.insertPost(post)) {
             ++failedCount;
+
+            if (errorDetails.size() < 5) {
+                errorDetails.append(
+                    QStringLiteral("Line %1: %2")
+                        .arg(lineNumber)
+                        .arg(message.isEmpty()
+                                 ? QStringLiteral("Insert database failed.")
+                                 : message)
+                    );
+            }
+
             continue;
         }
 
@@ -541,12 +577,15 @@ void PostManagementPage::onImportCsvClicked()
 
     refreshPosts();
 
-    setMessage(
-        QStringLiteral("CSV import finished. Success: %1, Failed: %2.")
-            .arg(successCount)
-            .arg(failedCount),
-        failedCount > 0
-        );
+    QString resultMessage = QStringLiteral("CSV import finished. Success: %1, Failed: %2.")
+                                .arg(successCount)
+                                .arg(failedCount);
+
+    if (!errorDetails.isEmpty()) {
+        resultMessage += QStringLiteral("\n") + errorDetails.join(QStringLiteral("\n"));
+    }
+
+    setMessage(resultMessage, failedCount > 0);
 }
 
 Post PostManagementPage::readPostFromForm() const
@@ -634,36 +673,156 @@ void PostManagementPage::setMessage(const QString& message,
         );
 }
 
-QStringList PostManagementPage::splitCsvLine(const QString& line) const
+QString PostManagementPage::cleanCsvField(const QString& value) const
 {
-    // 期末项目使用简单 CSV 即可：字段之间用英文逗号分隔。
-    // 如果内容本身要包含逗号，建议先不要放入 CSV。
-    QStringList fields = line.split(',');
+    QString field = value.trimmed();
 
-    for (QString& field : fields) {
-        field = field.trimmed();
+    // 有些 CSV 第一列前面会带 UTF-8 BOM，不去掉会影响表头识别。
+    if (!field.isEmpty() && field.at(0).unicode() == 0xFEFF) {
+        field.remove(0, 1);
     }
 
+    if (field.size() >= 2
+        && field.startsWith(QChar('"'))
+        && field.endsWith(QChar('"'))) {
+        field = field.mid(1, field.size() - 2);
+        field.replace(QStringLiteral("\"\""), QStringLiteral("\""));
+    }
+
+    return field.trimmed();
+}
+
+QStringList PostManagementPage::splitCsvLine(const QString& line) const
+{
+    // 这里比普通 split(',') 稍微稳一点：可以处理带英文逗号的引号字段。
+    QStringList fields;
+    QString current;
+    bool inQuotes = false;
+
+    for (int i = 0; i < line.size(); ++i) {
+        const QChar ch = line.at(i);
+
+        if (ch == QChar('"')) {
+            if (inQuotes && i + 1 < line.size() && line.at(i + 1) == QChar('"')) {
+                current.append(QChar('"'));
+                ++i;
+            } else {
+                inQuotes = !inQuotes;
+            }
+        } else if (ch == QChar(',') && !inQuotes) {
+            fields.append(cleanCsvField(current));
+            current.clear();
+        } else {
+            current.append(ch);
+        }
+    }
+
+    fields.append(cleanCsvField(current));
     return fields;
 }
 
+QDate PostManagementPage::parseCsvDate(const QString& value) const
+{
+    QString dateText = cleanCsvField(value);
+
+    // 如果以后 CSV 中出现“2026/05/01 12:00:00”，这里只取日期部分。
+    if (dateText.contains(QChar(' '))) {
+        dateText = dateText.section(QChar(' '), 0, 0);
+    }
+
+    const QStringList formats = {
+        QStringLiteral("yyyy-MM-dd"),
+        QStringLiteral("yyyy-M-d"),
+        QStringLiteral("yyyy/MM/dd"),
+        QStringLiteral("yyyy/M/d")
+    };
+
+    for (const QString& format : formats) {
+        const QDate date = QDate::fromString(dateText, format);
+
+        if (date.isValid()) {
+            return date;
+        }
+    }
+
+    return QDate();
+}
+
+PostManagementPage::CsvFormat PostManagementPage::detectCsvFormat(const QStringList& fields) const
+{
+    QStringList headers;
+
+    for (const QString& field : fields) {
+        headers.append(cleanCsvField(field).toLower());
+    }
+
+    const QString joinedHeader = headers.join(QStringLiteral(","));
+
+    if (joinedHeader.contains(QStringLiteral("platform"))
+        && joinedHeader.contains(QStringLiteral("account"))
+        && joinedHeader.contains(QStringLiteral("views"))) {
+        return CsvFormat::StandardPost;
+    }
+
+    if (joinedHeader.contains(QStringLiteral("时间"))
+        && joinedHeader.contains(QStringLiteral("播放量"))
+        && joinedHeader.contains(QStringLiteral("点赞"))) {
+        return CsvFormat::BilibiliTrend;
+    }
+
+    return CsvFormat::Unknown;
+}
+
 bool PostManagementPage::buildPostFromCsvFields(const QStringList& fields,
+                                                CsvFormat format,
                                                 Post& post,
                                                 QString& message) const
 {
-    if (fields.size() < 8) {
-        message = QStringLiteral("CSV row must contain 8 fields.");
-        return false;
+    auto csvNumber = [this](const QString& value) -> int {
+        QString numberText = cleanCsvField(value);
+        numberText.remove(QChar(','));
+        return numberText.toInt();
+    };
+
+    if (format == CsvFormat::StandardPost) {
+        if (fields.size() < 8) {
+            message = QStringLiteral("Standard CSV row must contain 8 fields.");
+            return false;
+        }
+
+        post.platform = cleanCsvField(fields.at(0));
+        post.accountName = cleanCsvField(fields.at(1));
+        post.content = cleanCsvField(fields.at(2));
+        post.publishDate = parseCsvDate(fields.at(3));
+        post.likes = csvNumber(fields.at(4));
+        post.comments = csvNumber(fields.at(5));
+        post.shares = csvNumber(fields.at(6));
+        post.views = csvNumber(fields.at(7));
+
+        return validatePostInput(post, message);
     }
 
-    post.platform = fields.at(0);
-    post.accountName = fields.at(1);
-    post.content = fields.at(2);
-    post.publishDate = QDate::fromString(fields.at(3), QStringLiteral("yyyy-MM-dd"));
-    post.likes = fields.at(4).toInt();
-    post.comments = fields.at(5).toInt();
-    post.shares = fields.at(6).toInt();
-    post.views = fields.at(7).toInt();
+    if (format == CsvFormat::BilibiliTrend) {
+        if (fields.size() < 10) {
+            message = QStringLiteral("Bilibili trend CSV row must contain 10 fields.");
+            return false;
+        }
 
-    return validatePostInput(post, message);
+        const QString dateText = cleanCsvField(fields.at(0));
+
+        post.platform = QStringLiteral("Bilibili");
+        post.accountName = QStringLiteral("Bilibili Video");
+        post.content = QStringLiteral("Bilibili playback trend - %1").arg(dateText);
+        post.publishDate = parseCsvDate(dateText);
+        post.views = csvNumber(fields.at(1));       // 播放量
+        post.likes = csvNumber(fields.at(4));       // 点赞
+        post.comments = csvNumber(fields.at(5))     // 弹幕
+                        + csvNumber(fields.at(6));  // 评论
+        post.shares = csvNumber(fields.at(7));      // 分享
+
+        return validatePostInput(post, message);
+    }
+
+    message = QStringLiteral("Unsupported CSV format.");
+    return false;
 }

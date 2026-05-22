@@ -5,6 +5,7 @@
 #include "../services/postrepository.h"
 
 #include <QWidget>
+#include <QStringList>
 
 class QComboBox;
 class QDateEdit;
@@ -18,18 +19,12 @@ class QTableWidget;
 
 /*
  * 帖子数据管理页面。
- *
  * 负责：
  * - 新增社交媒体帖子数据；
  * - 按平台和关键词查询；
  * - 表格展示帖子列表；
  * - 删除选中的帖子；
  * - 从 CSV 文件批量导入数据。
- *
- * 不负责：
- * - 直接写 SQL；
- * - 计算统计图表；
- * - 管理主窗口导航。
  */
 class PostManagementPage : public QWidget
 {
@@ -50,6 +45,13 @@ private slots:
     void onImportCsvClicked();
 
 private:
+    enum class CsvFormat
+    {
+        Unknown,
+        StandardPost,
+        BilibiliTrend
+    };
+
     // 创建页面整体布局。
     void buildUi();
 
@@ -94,13 +96,24 @@ private:
     void setMessage(const QString& message,
                     bool error = false);
 
-    // 解析一行简单 CSV。这里适合课程项目使用，不处理复杂引号嵌套。
+    // 清理 CSV 字段，比如去掉 BOM、引号和多余空格。
+    QString cleanCsvField(const QString& value) const;
+
+    // 解析一行 CSV，支持简单的引号字段。
     QStringList splitCsvLine(const QString& line) const;
+
+    // 解析 CSV 里的日期，同时支持 yyyy-MM-dd 和 yyyy/MM/dd。
+    QDate parseCsvDate(const QString& value) const;
+
+    // 判断 CSV 是项目标准格式，还是 Bilibili 导出的趋势数据。
+    CsvFormat detectCsvFormat(const QStringList& fields) const;
 
     // 根据 CSV 字段创建 Post。
     bool buildPostFromCsvFields(const QStringList& fields,
+                                CsvFormat format,
                                 Post& post,
                                 QString& message) const;
+
 
 private:
     PostRepository postRepository;
