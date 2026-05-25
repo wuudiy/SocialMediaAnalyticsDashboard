@@ -62,6 +62,10 @@ set(PROJECT_SOURCES
 
     forms/LoginForm.ui
     forms/mainwindow.ui
+    forms/PostManagementPage.ui
+    forms/UserManagementPage.ui
+    forms/LogPage.ui
+    forms/DashboardPage.ui
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)

@@ -16,19 +16,24 @@ class LogPage;
 class PostManagementPage;
 class UserManagementPage;
 
-class QLabel;
 class QPushButton;
-class QStackedWidget;
 class QWidget;
 
 /*
  * 登录后的主界面。
  *
- * 负责：
- * - 创建主窗口布局；
- * - 管理左侧导航；
- * - 管理页面切换；
- * - 根据当前用户角色控制功能入口。
+ * 现在采用“ui + cpp + AppStyle”分工：
+ *
+ * - forms/mainwindow.ui：
+ *   负责主窗口固定布局，例如左侧导航、顶部栏、QStackedWidget。
+ *
+ * - views/mainwindow.cpp：
+ *   负责页面创建、页面切换、权限控制、信号槽连接。
+ *
+ * - services/AppStyle：
+ *   负责统一 QSS 样式。
+ *
+ * 这样可以减少 MainWindow.cpp 中大量 new 控件和 addWidget 代码。
  */
 class MainWindow : public QMainWindow
 {
@@ -50,16 +55,13 @@ private slots:
     void exitApplication();
 
 private:
-    void buildUi();
+    void prepareUiObjects();
+    void setupPages();
+    void connectSignals();
     void applyStyleSheet();
-
-    QWidget* createSideBar();
-    QWidget* createTopBar();
 
     QWidget* createPlaceholderPage(const QString& title,
                                    const QString& description);
-
-    QPushButton* createNavButton(const QString& text);
 
     void navigateTo(QWidget *page,
                     const QString& title,
@@ -73,19 +75,6 @@ private:
     Ui::MainWindow *ui;
 
     User currentUser;
-
-    QLabel *pageTitleLabel;
-    QLabel *userInfoLabel;
-
-    QPushButton *dashboardButton;
-    QPushButton *postManagementButton;
-    QPushButton *analyticsButton;
-    QPushButton *userManagementButton;
-    QPushButton *operationLogsButton;
-    QPushButton *settingsButton;
-    QPushButton *logoutButton;
-
-    QStackedWidget *pageStack;
 
     DashboardPage *dashboardPage;
     PostManagementPage *postManagementPage;
