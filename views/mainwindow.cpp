@@ -1,5 +1,6 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
+#include "../services/appstyle.h"
 
 #include "dashboardpage.h"
 #include "logpage.h"
@@ -134,89 +135,10 @@ void MainWindow::buildUi()
     applyStyleSheet();
 }
 
-// 集中管理主窗口样式，避免布局代码里混入大段 QSS。
+// 集中管理主窗口样式，避免 MainWindow 中混入大段 QSS。
 void MainWindow::applyStyleSheet()
 {
-    setStyleSheet(
-        "QWidget#sideBar {"
-        "    background: #111827;"
-        "}"
-        "QWidget#mainArea {"
-        "    background: #F3F4F6;"
-        "}"
-        "QWidget#topBar {"
-        "    background: #FFFFFF;"
-        "    border-bottom: 1px solid #E5E7EB;"
-        "}"
-
-        "QLabel#appName {"
-        "    color: #FFFFFF;"
-        "    font-size: 18px;"
-        "    font-weight: 700;"
-        "}"
-        "QLabel#appSubTitle {"
-        "    color: #9CA3AF;"
-        "    font-size: 12px;"
-        "}"
-        "QLabel#pageTitleLabel {"
-        "    color: #111827;"
-        "    font-size: 18px;"
-        "    font-weight: 700;"
-        "}"
-        "QLabel#userInfoLabel {"
-        "    color: #374151;"
-        "    font-size: 13px;"
-        "}"
-
-        "QPushButton#navButton {"
-        "    color: #D1D5DB;"
-        "    background: transparent;"
-        "    border: none;"
-        "    border-radius: 8px;"
-        "    padding: 10px 14px;"
-        "    text-align: left;"
-        "    font-size: 14px;"
-        "}"
-        "QPushButton#navButton:hover {"
-        "    background: #1F2937;"
-        "    color: #FFFFFF;"
-        "}"
-        "QPushButton#activeNavButton {"
-        "    color: #FFFFFF;"
-        "    background: #2563EB;"
-        "    border: none;"
-        "    border-radius: 8px;"
-        "    padding: 10px 14px;"
-        "    text-align: left;"
-        "    font-size: 14px;"
-        "    font-weight: 600;"
-        "}"
-        "QPushButton#logoutButton {"
-        "    color: #374151;"
-        "    background: #F3F4F6;"
-        "    border: 1px solid #E5E7EB;"
-        "    border-radius: 8px;"
-        "    padding: 8px 14px;"
-        "}"
-        "QPushButton#logoutButton:hover {"
-        "    background: #E5E7EB;"
-        "}"
-
-        "QFrame#placeholderCard {"
-        "    background: #FFFFFF;"
-        "    border: 1px solid #E5E7EB;"
-        "    border-radius: 12px;"
-        "}"
-        "QLabel#placeholderTitle {"
-        "    color: #111827;"
-        "    font-size: 24px;"
-        "    font-weight: 700;"
-        "}"
-        "QLabel#placeholderText {"
-        "    color: #6B7280;"
-        "    font-size: 14px;"
-        "}"
-        );
+    setStyleSheet(AppStyle::mainWindowStyle());
 }
 
 // 构建左侧导航栏：应用标题、菜单按钮、页面切换信号。

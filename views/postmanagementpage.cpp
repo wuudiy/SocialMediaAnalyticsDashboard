@@ -1,4 +1,5 @@
 #include "postmanagementpage.h"
+#include "../services/appstyle.h"
 
 #include <QAbstractItemView>
 #include <QComboBox>
@@ -117,106 +118,7 @@ void PostManagementPage::buildUi()
 
 void PostManagementPage::applyStyleSheet()
 {
-    setStyleSheet(
-        "QLabel#pageTitle {"
-        "    color: #111827;"
-        "    font-size: 24px;"
-        "    font-weight: 700;"
-        "}"
-        "QLabel#pageSubtitle {"
-        "    color: #6B7280;"
-        "    font-size: 13px;"
-        "}"
-        "QFrame#card {"
-        "    background: #FFFFFF;"
-        "    border: 1px solid #E5E7EB;"
-        "    border-radius: 12px;"
-        "}"
-        "QLabel#fieldLabel {"
-        "    color: #374151;"
-        "    font-size: 13px;"
-        "    font-weight: 600;"
-        "}"
-        "QLineEdit, QComboBox, QDateEdit, QSpinBox {"
-        "    min-height: 32px;"
-        "    border: 1px solid #D1D5DB;"
-        "    border-radius: 8px;"
-        "    padding-left: 8px;"
-        "    background: #FFFFFF;"
-        "}"
-        "QLineEdit:focus, QComboBox:focus, QDateEdit:focus, QSpinBox:focus {"
-        "    border: 1px solid #2563EB;"
-        "}"
-        "QPushButton#primaryButton {"
-        "    min-height: 34px;"
-        "    background: #2563EB;"
-        "    color: #FFFFFF;"
-        "    border: none;"
-        "    border-radius: 8px;"
-        "    padding: 0 16px;"
-        "    font-weight: 600;"
-        "}"
-        "QPushButton#primaryButton:hover {"
-        "    background: #1D4ED8;"
-        "}"
-        "QPushButton#successButton {"
-        "    min-height: 34px;"
-        "    background: #16A34A;"
-        "    color: #FFFFFF;"
-        "    border: none;"
-        "    border-radius: 8px;"
-        "    padding: 0 16px;"
-        "    font-weight: 600;"
-        "}"
-        "QPushButton#successButton:hover {"
-        "    background: #15803D;"
-        "}"
-        "QPushButton#successButton:disabled {"
-        "    background: #9CA3AF;"
-        "    color: #F9FAFB;"
-        "}"
-        "QPushButton#secondaryButton {"
-        "    min-height: 34px;"
-        "    background: #F9FAFB;"
-        "    color: #374151;"
-        "    border: 1px solid #D1D5DB;"
-        "    border-radius: 8px;"
-        "    padding: 0 16px;"
-        "}"
-        "QPushButton#secondaryButton:hover {"
-        "    background: #F3F4F6;"
-        "}"
-        "QPushButton#dangerButton {"
-        "    min-height: 34px;"
-        "    background: #DC2626;"
-        "    color: #FFFFFF;"
-        "    border: none;"
-        "    border-radius: 8px;"
-        "    padding: 0 16px;"
-        "    font-weight: 600;"
-        "}"
-        "QPushButton#dangerButton:hover {"
-        "    background: #B91C1C;"
-        "}"
-        "QTableWidget {"
-        "    border: 1px solid #E5E7EB;"
-        "    border-radius: 8px;"
-        "    gridline-color: #E5E7EB;"
-        "    background: #FFFFFF;"
-        "}"
-        "QHeaderView::section {"
-        "    background: #F9FAFB;"
-        "    color: #374151;"
-        "    border: none;"
-        "    border-bottom: 1px solid #E5E7EB;"
-        "    padding: 8px;"
-        "    font-weight: 600;"
-        "}"
-        "QLabel#messageLabel {"
-        "    color: #374151;"
-        "    font-size: 13px;"
-        "}"
-        );
+    setStyleSheet(AppStyle::dataManagementPageStyle());
 }
 
 QFrame* PostManagementPage::createFormCard()
@@ -909,12 +811,7 @@ void PostManagementPage::setMessage(const QString& message,
                                     bool error)
 {
     messageLabel->setText(message);
-
-    messageLabel->setStyleSheet(
-        error
-            ? QStringLiteral("color: #DC2626;")
-            : QStringLiteral("color: #374151;")
-        );
+    messageLabel->setStyleSheet(AppStyle::messageLabelStyle(error));
 }
 
 int PostManagementPage::currentOperatorId() const

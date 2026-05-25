@@ -51,14 +51,14 @@ set(PROJECT_SOURCES
     views/dashboardpage.cpp
     views/postmanagementpage.h
     views/postmanagementpage.cpp
+    views/logpage.h
+    views/logpage.cpp
     views/loginview.h
     views/loginview.cpp
     views/mainwindow.h
     views/mainwindow.cpp
     views/usermanagementpage.h
     views/usermanagementpage.cpp
-    views/logpage.h
-    views/logpage.cpp
 
     forms/LoginForm.ui
     forms/mainwindow.ui
@@ -68,7 +68,6 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
     qt_add_executable(${PROJECT_NAME}
         MANUAL_FINALIZATION
         ${PROJECT_SOURCES}
-        views/logpage.h views/logpage.cpp
     )
 else()
     add_executable(${PROJECT_NAME}

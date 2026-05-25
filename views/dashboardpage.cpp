@@ -1,4 +1,5 @@
 #include "dashboardpage.h"
+#include "../services/appstyle.h"
 
 #include <QAbstractItemView>
 #include <QFrame>
@@ -64,67 +65,10 @@ void DashboardPage::buildUi()
     applyStyleSheet();
 }
 
-// 集中管理 Dashboard 样式，避免布局代码里混入大段 QSS。
+// Dashboard 样式统一收口到 AppStyle，页面只保留布局和业务逻辑。
 void DashboardPage::applyStyleSheet()
 {
-    setStyleSheet(
-        "QLabel#pageTitle {"
-        "    font-size: 24px;"
-        "    font-weight: 700;"
-        "    color: #111827;"
-        "}"
-        "QLabel#pageSubtitle {"
-        "    font-size: 13px;"
-        "    color: #6B7280;"
-        "}"
-        "QFrame#card {"
-        "    background: #FFFFFF;"
-        "    border: 1px solid #E5E7EB;"
-        "    border-radius: 12px;"
-        "}"
-        "QLabel#cardTitle {"
-        "    color: #6B7280;"
-        "    font-size: 12px;"
-        "    font-weight: 600;"
-        "}"
-        "QLabel#cardValue {"
-        "    color: #111827;"
-        "    font-size: 26px;"
-        "    font-weight: 700;"
-        "}"
-        "QLabel#cardDescription {"
-        "    color: #9CA3AF;"
-        "    font-size: 12px;"
-        "}"
-        "QLabel#panelTitle {"
-        "    color: #111827;"
-        "    font-size: 16px;"
-        "    font-weight: 700;"
-        "}"
-        "QLabel#topPostTitle {"
-        "    color: #111827;"
-        "    font-size: 14px;"
-        "    font-weight: 600;"
-        "}"
-        "QLabel#topPostDetail {"
-        "    color: #6B7280;"
-        "    font-size: 13px;"
-        "}"
-        "QTableWidget {"
-        "    border: 1px solid #E5E7EB;"
-        "    border-radius: 8px;"
-        "    background: #FFFFFF;"
-        "    gridline-color: #E5E7EB;"
-        "}"
-        "QHeaderView::section {"
-        "    background: #F9FAFB;"
-        "    color: #374151;"
-        "    border: none;"
-        "    border-bottom: 1px solid #E5E7EB;"
-        "    padding: 8px;"
-        "    font-weight: 600;"
-        "}"
-        );
+    setStyleSheet(AppStyle::dashboardPageStyle());
 }
 
 QGridLayout* DashboardPage::createSummaryGrid()

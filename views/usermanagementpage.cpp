@@ -1,4 +1,5 @@
 #include "usermanagementpage.h"
+#include "../services/appstyle.h"
 
 #include <QComboBox>
 #include <QFrame>
@@ -54,63 +55,11 @@ void UserManagementPage::buildUi()
     updateAccessState();
 }
 
-// 集中管理用户管理页样式，后续调整表单视觉优先改这里。
+// 用户管理页复用数据管理页面样式。
+// 这里不再写大段 QSS，避免和 PostManagementPage / LogPage 重复。
 void UserManagementPage::applyStyleSheet()
 {
-    setStyleSheet(
-        "QLabel#pageTitle {"
-        "    font-size: 24px;"
-        "    font-weight: 700;"
-        "    color: #111827;"
-        "}"
-        "QLabel#pageSubtitle {"
-        "    font-size: 13px;"
-        "    color: #6B7280;"
-        "}"
-        "QLabel#fieldLabel {"
-        "    color: #374151;"
-        "    font-size: 13px;"
-        "    font-weight: 600;"
-        "}"
-        "QFrame#card {"
-        "    background: #FFFFFF;"
-        "    border: 1px solid #E5E7EB;"
-        "    border-radius: 12px;"
-        "}"
-        "QLineEdit, QComboBox {"
-        "    min-height: 34px;"
-        "    border: 1px solid #D1D5DB;"
-        "    border-radius: 8px;"
-        "    padding-left: 10px;"
-        "    background: #FFFFFF;"
-        "}"
-        "QLineEdit:focus, QComboBox:focus {"
-        "    border: 1px solid #2563EB;"
-        "}"
-        "QLineEdit:disabled, QComboBox:disabled {"
-        "    color: #9CA3AF;"
-        "    background: #F9FAFB;"
-        "}"
-        "QPushButton#primaryButton {"
-        "    min-height: 36px;"
-        "    background: #2563EB;"
-        "    color: #FFFFFF;"
-        "    border: none;"
-        "    border-radius: 8px;"
-        "    padding: 0 18px;"
-        "    font-weight: 600;"
-        "}"
-        "QPushButton#primaryButton:hover {"
-        "    background: #1D4ED8;"
-        "}"
-        "QPushButton#primaryButton:disabled {"
-        "    background: #9CA3AF;"
-        "}"
-        "QLabel#messageLabel {"
-        "    color: #374151;"
-        "    font-size: 13px;"
-        "}"
-        );
+    setStyleSheet(AppStyle::dataManagementPageStyle());
 }
 
 // 创建新增用户表单卡片，表单字段和按钮都在这里初始化。
@@ -155,7 +104,7 @@ QFrame* UserManagementPage::createFormCard()
     return card;
 }
 
-// 创建表单字段名，统一 objectName 方便 QSS 控制样式。
+// 创建表单字段名，统一 objectName 方便 AppStyle 控制样式。
 QLabel* UserManagementPage::createFieldLabel(const QString& text)
 {
     auto *label = new QLabel(text);
@@ -182,7 +131,7 @@ void UserManagementPage::addFormRow(QGridLayout *layout,
 void UserManagementPage::onCreateUserClicked()
 {
     if (!canManageUsers()) {
-        setMessage(QStringLiteral("You do not have permission to create users."));
+        setMessage(QStringLiteral("You do not have permission to create users."), true);
 
         QMessageBox::warning(
             this,
@@ -203,7 +152,8 @@ void UserManagementPage::onCreateUserClicked()
         message
         );
 
-    setMessage(message);
+    // 创建失败显示红色提示，创建成功显示普通提示。
+    setMessage(message, !success);
 
     if (!success) {
         QMessageBox::warning(
@@ -256,7 +206,7 @@ void UserManagementPage::updateAccessState()
     }
 
     tipLabel->setText(QStringLiteral("Only admin users can manage accounts."));
-    setMessage(QStringLiteral("You do not have permission to create users."));
+    setMessage(QStringLiteral("You do not have permission to create users."), true);
 }
 
 // 管理员判断统一收口，后续扩展权限规则时只改这里。
@@ -274,7 +224,10 @@ QString UserManagementPage::selectedRole() const
 }
 
 // 设置页面内提示信息，避免多处直接操作 messageLabel。
-void UserManagementPage::setMessage(const QString& message)
+// error=true 时复用 AppStyle 的错误提示颜色。
+void UserManagementPage::setMessage(const QString& message,
+                                    bool error)
 {
     messageLabel->setText(message);
+    messageLabel->setStyleSheet(AppStyle::messageLabelStyle(error));
 }
