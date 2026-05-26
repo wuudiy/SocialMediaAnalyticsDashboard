@@ -1,4 +1,7 @@
 #include "postmanagementpage.h"
+#include "ui_postmanagementpage.h"
+
+#include "../services/appstyle.h"
 
 #include <QAbstractItemView>
 #include <QComboBox>
@@ -7,13 +10,11 @@
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
-#include <QFrame>
-#include <QGridLayout>
 #include <QHeaderView>
 #include <QIODevice>
-#include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QList>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSpinBox>
@@ -26,192 +27,79 @@
 #include <QStringConverter>
 #endif
 
-#include <QVBoxLayout>
-
 PostManagementPage::PostManagementPage(QWidget *parent)
     : QWidget(parent),
-    messageLabel(nullptr),
-    platformComboBox(nullptr),
-    accountLineEdit(nullptr),
-    contentLineEdit(nullptr),
-    publishDateEdit(nullptr),
-    likesSpinBox(nullptr),
-    commentsSpinBox(nullptr),
-    sharesSpinBox(nullptr),
-    viewsSpinBox(nullptr),
-    addButton(nullptr),
-    clearButton(nullptr),
-    importCsvButton(nullptr),
-    searchPlatformComboBox(nullptr),
-    keywordLineEdit(nullptr),
-    searchButton(nullptr),
-    resetSearchButton(nullptr),
-    deleteButton(nullptr),
-    refreshButton(nullptr),
-    postTable(nullptr)
+    ui(new Ui::PostManagementPage),
+    editingPostId(-1)
 {
-    buildUi();
+    /*
+     * setupUi() 会读取 forms/postmanagementpage.ui，
+     * 并创建页面标题、表单卡片、搜索栏、表格和消息提示等固定控件。
+     */
+    ui->setupUi(this);
+
+    prepareUiObjects();
+    setupTable();
+    connectSignals();
+    applyStyleSheet();
+
     refreshPosts();
 }
 
-// 主窗口登录成功后会调用这个函数，把当前登录用户传进帖子页面。
-// 这样新增、删除、导入日志里就能记录是谁操作的。
+PostManagementPage::~PostManagementPage()
+{
+    delete ui;
+}
+
 void PostManagementPage::setCurrentUser(const User& user)
 {
     currentUser = user;
 }
 
-// 创建页面：上方是新增表单，下方是查询和表格。
-void PostManagementPage::buildUi()
+/*
+ * 初始化 .ui 中控件的运行时属性。
+ *
+ * 说明：
+ * .ui 文件负责“控件在哪里”，这里负责“控件运行时怎么用”。
+ * 这样做的好处是：后续你在 Qt Designer 里调整布局，不会影响业务逻辑。
+ */
+void PostManagementPage::prepareUiObjects()
 {
-    auto *rootLayout = new QVBoxLayout(this);
-    rootLayout->setContentsMargins(24, 22, 24, 24);
-    rootLayout->setSpacing(16);
+    setObjectName(QStringLiteral("postManagementPage"));
 
-    auto *titleLabel = new QLabel(QStringLiteral("Post Data Management"));
-    titleLabel->setObjectName(QStringLiteral("pageTitle"));
+    // 这些 objectName 对应 AppStyle::dataManagementPageStyle() 中的 QSS 选择器。
+    ui->pageTitleLabel->setObjectName(QStringLiteral("pageTitle"));
+    ui->pageSubtitleLabel->setObjectName(QStringLiteral("pageSubtitle"));
+    ui->formCard->setObjectName(QStringLiteral("card"));
+    ui->tableCard->setObjectName(QStringLiteral("card"));
+    ui->messageLabel->setObjectName(QStringLiteral("messageLabel"));
+    ui->messageLabel->setWordWrap(true);
 
-    auto *subtitleLabel = new QLabel(
-        QStringLiteral("Add, search, delete or import local social media post data.")
-        );
-    subtitleLabel->setObjectName(QStringLiteral("pageSubtitle"));
+    // 字段名统一改成 fieldLabel，方便 AppStyle 统一控制字体颜色和粗细。
+    const QList<QLabel*> fieldLabels = {
+        ui->platformLabel,
+        ui->accountLabel,
+        ui->contentLabel,
+        ui->dateLabel,
+        ui->likesLabel,
+        ui->commentsLabel,
+        ui->sharesLabel,
+        ui->viewsLabel
+    };
 
-    messageLabel = new QLabel();
-    messageLabel->setObjectName(QStringLiteral("messageLabel"));
-    messageLabel->setWordWrap(true);
+    for (QLabel *label : fieldLabels) {
+        if (label) {
+            label->setObjectName(QStringLiteral("fieldLabel"));
+        }
+    }
 
-    rootLayout->addWidget(titleLabel);
-    rootLayout->addWidget(subtitleLabel);
-    rootLayout->addWidget(createFormCard());
-    rootLayout->addWidget(createTableCard(), 1);
-    rootLayout->addWidget(messageLabel);
+    // 让表单的输入列自动占满剩余宽度，保持和原代码版本一致。
+    ui->formLayout->setColumnStretch(1, 1);
+    ui->formLayout->setColumnStretch(3, 1);
 
-    applyStyleSheet();
-
-    connect(addButton, &QPushButton::clicked,
-            this, &PostManagementPage::onAddPostClicked);
-
-    connect(clearButton, &QPushButton::clicked,
-            this, &PostManagementPage::resetForm);
-
-    connect(importCsvButton, &QPushButton::clicked,
-            this, &PostManagementPage::onImportCsvClicked);
-
-    connect(searchButton, &QPushButton::clicked,
-            this, &PostManagementPage::onSearchClicked);
-
-    connect(resetSearchButton, &QPushButton::clicked,
-            this, &PostManagementPage::onResetSearchClicked);
-
-    connect(deleteButton, &QPushButton::clicked,
-            this, &PostManagementPage::onDeletePostClicked);
-
-    connect(refreshButton, &QPushButton::clicked,
-            this, &PostManagementPage::refreshPosts);
-}
-
-void PostManagementPage::applyStyleSheet()
-{
-    setStyleSheet(
-        "QLabel#pageTitle {"
-        "    color: #111827;"
-        "    font-size: 24px;"
-        "    font-weight: 700;"
-        "}"
-        "QLabel#pageSubtitle {"
-        "    color: #6B7280;"
-        "    font-size: 13px;"
-        "}"
-        "QFrame#card {"
-        "    background: #FFFFFF;"
-        "    border: 1px solid #E5E7EB;"
-        "    border-radius: 12px;"
-        "}"
-        "QLabel#fieldLabel {"
-        "    color: #374151;"
-        "    font-size: 13px;"
-        "    font-weight: 600;"
-        "}"
-        "QLineEdit, QComboBox, QDateEdit, QSpinBox {"
-        "    min-height: 32px;"
-        "    border: 1px solid #D1D5DB;"
-        "    border-radius: 8px;"
-        "    padding-left: 8px;"
-        "    background: #FFFFFF;"
-        "}"
-        "QLineEdit:focus, QComboBox:focus, QDateEdit:focus, QSpinBox:focus {"
-        "    border: 1px solid #2563EB;"
-        "}"
-        "QPushButton#primaryButton {"
-        "    min-height: 34px;"
-        "    background: #2563EB;"
-        "    color: #FFFFFF;"
-        "    border: none;"
-        "    border-radius: 8px;"
-        "    padding: 0 16px;"
-        "    font-weight: 600;"
-        "}"
-        "QPushButton#primaryButton:hover {"
-        "    background: #1D4ED8;"
-        "}"
-        "QPushButton#secondaryButton {"
-        "    min-height: 34px;"
-        "    background: #F9FAFB;"
-        "    color: #374151;"
-        "    border: 1px solid #D1D5DB;"
-        "    border-radius: 8px;"
-        "    padding: 0 16px;"
-        "}"
-        "QPushButton#secondaryButton:hover {"
-        "    background: #F3F4F6;"
-        "}"
-        "QPushButton#dangerButton {"
-        "    min-height: 34px;"
-        "    background: #DC2626;"
-        "    color: #FFFFFF;"
-        "    border: none;"
-        "    border-radius: 8px;"
-        "    padding: 0 16px;"
-        "    font-weight: 600;"
-        "}"
-        "QPushButton#dangerButton:hover {"
-        "    background: #B91C1C;"
-        "}"
-        "QTableWidget {"
-        "    border: 1px solid #E5E7EB;"
-        "    border-radius: 8px;"
-        "    gridline-color: #E5E7EB;"
-        "    background: #FFFFFF;"
-        "}"
-        "QHeaderView::section {"
-        "    background: #F9FAFB;"
-        "    color: #374151;"
-        "    border: none;"
-        "    border-bottom: 1px solid #E5E7EB;"
-        "    padding: 8px;"
-        "    font-weight: 600;"
-        "}"
-        "QLabel#messageLabel {"
-        "    color: #374151;"
-        "    font-size: 13px;"
-        "}"
-        );
-}
-
-QFrame* PostManagementPage::createFormCard()
-{
-    auto *card = new QFrame();
-    card->setObjectName(QStringLiteral("card"));
-
-    auto *layout = new QGridLayout(card);
-    layout->setContentsMargins(20, 18, 20, 18);
-    layout->setHorizontalSpacing(14);
-    layout->setVerticalSpacing(12);
-    layout->setColumnStretch(1, 1);
-    layout->setColumnStretch(3, 1);
-
-    platformComboBox = new QComboBox();
-    platformComboBox->addItems({
+    // 初始化新增/编辑表单的平台下拉框。
+    ui->platformComboBox->clear();
+    ui->platformComboBox->addItems({
         QStringLiteral("Weibo"),
         QStringLiteral("Douyin"),
         QStringLiteral("Bilibili"),
@@ -219,144 +107,107 @@ QFrame* PostManagementPage::createFormCard()
         QStringLiteral("Wechat")
     });
 
-    accountLineEdit = new QLineEdit();
-    accountLineEdit->setPlaceholderText(QStringLiteral("Account name"));
+    ui->accountLineEdit->setPlaceholderText(QStringLiteral("Account name"));
+    ui->contentLineEdit->setPlaceholderText(QStringLiteral("Post title or content summary"));
 
-    contentLineEdit = new QLineEdit();
-    contentLineEdit->setPlaceholderText(QStringLiteral("Post title or content summary"));
+    ui->publishDateEdit->setDate(QDate::currentDate());
+    ui->publishDateEdit->setCalendarPopup(true);
+    ui->publishDateEdit->setDisplayFormat(QStringLiteral("yyyy-MM-dd"));
 
-    publishDateEdit = new QDateEdit(QDate::currentDate());
-    publishDateEdit->setCalendarPopup(true);
-    publishDateEdit->setDisplayFormat(QStringLiteral("yyyy-MM-dd"));
-
-    likesSpinBox = new QSpinBox();
-    commentsSpinBox = new QSpinBox();
-    sharesSpinBox = new QSpinBox();
-    viewsSpinBox = new QSpinBox();
-
+    // 课程作业中用 int 保存互动数据，所以这里最大值也保持 int 友好范围。
     const int maxNumber = 100000000;
-    likesSpinBox->setMaximum(maxNumber);
-    commentsSpinBox->setMaximum(maxNumber);
-    sharesSpinBox->setMaximum(maxNumber);
-    viewsSpinBox->setMaximum(maxNumber);
+    ui->likesSpinBox->setMaximum(maxNumber);
+    ui->commentsSpinBox->setMaximum(maxNumber);
+    ui->sharesSpinBox->setMaximum(maxNumber);
+    ui->viewsSpinBox->setMaximum(maxNumber);
 
-    addButton = new QPushButton(QStringLiteral("Add Post"));
-    addButton->setObjectName(QStringLiteral("primaryButton"));
-    addButton->setCursor(Qt::PointingHandCursor);
+    // 初始化搜索平台下拉框。currentData() 是实际查询条件，显示文本只是给用户看。
+    ui->searchPlatformComboBox->clear();
+    ui->searchPlatformComboBox->addItem(QStringLiteral("All Platforms"), QString());
+    ui->searchPlatformComboBox->addItem(QStringLiteral("Weibo"), QStringLiteral("Weibo"));
+    ui->searchPlatformComboBox->addItem(QStringLiteral("Douyin"), QStringLiteral("Douyin"));
+    ui->searchPlatformComboBox->addItem(QStringLiteral("Bilibili"), QStringLiteral("Bilibili"));
+    ui->searchPlatformComboBox->addItem(QStringLiteral("Xiaohongshu"), QStringLiteral("Xiaohongshu"));
+    ui->searchPlatformComboBox->addItem(QStringLiteral("Wechat"), QStringLiteral("Wechat"));
 
-    clearButton = new QPushButton(QStringLiteral("Clear"));
-    clearButton->setObjectName(QStringLiteral("secondaryButton"));
-    clearButton->setCursor(Qt::PointingHandCursor);
+    ui->keywordLineEdit->setPlaceholderText(QStringLiteral("Search content or account"));
 
-    importCsvButton = new QPushButton(QStringLiteral("Import CSV"));
-    importCsvButton->setObjectName(QStringLiteral("secondaryButton"));
-    importCsvButton->setCursor(Qt::PointingHandCursor);
+    // 按钮样式通过 objectName 绑定 AppStyle，业务代码只负责设置状态和点击逻辑。
+    ui->addButton->setObjectName(QStringLiteral("primaryButton"));
+    ui->updateButton->setObjectName(QStringLiteral("successButton"));
+    ui->clearButton->setObjectName(QStringLiteral("secondaryButton"));
+    ui->importCsvButton->setObjectName(QStringLiteral("secondaryButton"));
+    ui->searchButton->setObjectName(QStringLiteral("primaryButton"));
+    ui->resetSearchButton->setObjectName(QStringLiteral("secondaryButton"));
+    ui->refreshButton->setObjectName(QStringLiteral("secondaryButton"));
+    ui->deleteButton->setObjectName(QStringLiteral("dangerButton"));
 
-    addFormRow(layout, 0, QStringLiteral("Platform"), platformComboBox);
-    addFormRow(layout, 0, QStringLiteral("Account"), accountLineEdit);
-    addFormRow(layout, 1, QStringLiteral("Content"), contentLineEdit);
-    addFormRow(layout, 1, QStringLiteral("Date"), publishDateEdit);
-    addFormRow(layout, 2, QStringLiteral("Likes"), likesSpinBox);
-    addFormRow(layout, 2, QStringLiteral("Comments"), commentsSpinBox);
-    addFormRow(layout, 3, QStringLiteral("Shares"), sharesSpinBox);
-    addFormRow(layout, 3, QStringLiteral("Views"), viewsSpinBox);
+    const QList<QPushButton*> buttons = {
+        ui->addButton,
+        ui->updateButton,
+        ui->clearButton,
+        ui->importCsvButton,
+        ui->searchButton,
+        ui->resetSearchButton,
+        ui->refreshButton,
+        ui->deleteButton
+    };
 
-    auto *buttonLayout = new QHBoxLayout();
-    buttonLayout->setSpacing(10);
-    buttonLayout->addWidget(addButton);
-    buttonLayout->addWidget(clearButton);
-    buttonLayout->addWidget(importCsvButton);
-    buttonLayout->addStretch();
-
-    layout->addLayout(buttonLayout, 4, 1, 1, 3);
-
-    return card;
-}
-
-QFrame* PostManagementPage::createTableCard()
-{
-    auto *card = new QFrame();
-    card->setObjectName(QStringLiteral("card"));
-
-    auto *layout = new QVBoxLayout(card);
-    layout->setContentsMargins(20, 18, 20, 18);
-    layout->setSpacing(12);
-
-    auto *searchLayout = new QHBoxLayout();
-    searchLayout->setSpacing(10);
-
-    searchPlatformComboBox = new QComboBox();
-    searchPlatformComboBox->addItem(QStringLiteral("All Platforms"), QString());
-    searchPlatformComboBox->addItem(QStringLiteral("Weibo"), QStringLiteral("Weibo"));
-    searchPlatformComboBox->addItem(QStringLiteral("Douyin"), QStringLiteral("Douyin"));
-    searchPlatformComboBox->addItem(QStringLiteral("Bilibili"), QStringLiteral("Bilibili"));
-    searchPlatformComboBox->addItem(QStringLiteral("Xiaohongshu"), QStringLiteral("Xiaohongshu"));
-    searchPlatformComboBox->addItem(QStringLiteral("Wechat"), QStringLiteral("Wechat"));
-
-    keywordLineEdit = new QLineEdit();
-    keywordLineEdit->setPlaceholderText(QStringLiteral("Search content or account"));
-
-    searchButton = new QPushButton(QStringLiteral("Search"));
-    searchButton->setObjectName(QStringLiteral("primaryButton"));
-    searchButton->setCursor(Qt::PointingHandCursor);
-
-    resetSearchButton = new QPushButton(QStringLiteral("Reset"));
-    resetSearchButton->setObjectName(QStringLiteral("secondaryButton"));
-    resetSearchButton->setCursor(Qt::PointingHandCursor);
-
-    refreshButton = new QPushButton(QStringLiteral("Refresh"));
-    refreshButton->setObjectName(QStringLiteral("secondaryButton"));
-    refreshButton->setCursor(Qt::PointingHandCursor);
-
-    deleteButton = new QPushButton(QStringLiteral("Delete Selected"));
-    deleteButton->setObjectName(QStringLiteral("dangerButton"));
-    deleteButton->setCursor(Qt::PointingHandCursor);
-
-    searchLayout->addWidget(searchPlatformComboBox);
-    searchLayout->addWidget(keywordLineEdit, 1);
-    searchLayout->addWidget(searchButton);
-    searchLayout->addWidget(resetSearchButton);
-    searchLayout->addWidget(refreshButton);
-    searchLayout->addWidget(deleteButton);
-
-    postTable = new QTableWidget();
-    setupTable();
-
-    layout->addLayout(searchLayout);
-    layout->addWidget(postTable, 1);
-
-    return card;
-}
-
-QLabel* PostManagementPage::createFieldLabel(const QString& text)
-{
-    auto *label = new QLabel(text);
-    label->setObjectName(QStringLiteral("fieldLabel"));
-
-    return label;
-}
-
-void PostManagementPage::addFormRow(QGridLayout *layout,
-                                    int row,
-                                    const QString& labelText,
-                                    QWidget *field)
-{
-    if (!layout || !field) {
-        return;
+    for (QPushButton *button : buttons) {
+        if (button) {
+            button->setCursor(Qt::PointingHandCursor);
+        }
     }
 
-    // 同一行放两组字段：左边一组，右边一组。
-    const int baseColumn = (layout->itemAtPosition(row, 0) == nullptr) ? 0 : 2;
+    ui->updateButton->setEnabled(false);
+}
 
-    layout->addWidget(createFieldLabel(labelText), row, baseColumn);
-    layout->addWidget(field, row, baseColumn + 1);
+/*
+ * 集中连接信号槽。
+ *
+ * .ui 文件中不要直接写业务逻辑连接，
+ * 这样页面行为都能在 cpp 中统一查看和维护。
+ */
+void PostManagementPage::connectSignals()
+{
+    connect(ui->addButton, &QPushButton::clicked,
+            this, &PostManagementPage::onAddPostClicked);
+
+    connect(ui->updateButton, &QPushButton::clicked,
+            this, &PostManagementPage::onUpdatePostClicked);
+
+    connect(ui->clearButton, &QPushButton::clicked,
+            this, &PostManagementPage::resetForm);
+
+    connect(ui->importCsvButton, &QPushButton::clicked,
+            this, &PostManagementPage::onImportCsvClicked);
+
+    connect(ui->searchButton, &QPushButton::clicked,
+            this, &PostManagementPage::onSearchClicked);
+
+    connect(ui->resetSearchButton, &QPushButton::clicked,
+            this, &PostManagementPage::onResetSearchClicked);
+
+    connect(ui->deleteButton, &QPushButton::clicked,
+            this, &PostManagementPage::onDeletePostClicked);
+
+    connect(ui->refreshButton, &QPushButton::clicked,
+            this, &PostManagementPage::refreshPosts);
+
+    connect(ui->postTable, &QTableWidget::cellDoubleClicked,
+            this, &PostManagementPage::onTableCellDoubleClicked);
+}
+
+void PostManagementPage::applyStyleSheet()
+{
+    setStyleSheet(AppStyle::dataManagementPageStyle());
 }
 
 void PostManagementPage::setupTable()
 {
-    postTable->setColumnCount(10);
+    ui->postTable->setColumnCount(10);
 
-    postTable->setHorizontalHeaderLabels({
+    ui->postTable->setHorizontalHeaderLabels({
         QStringLiteral("ID"),
         QStringLiteral("Platform"),
         QStringLiteral("Account"),
@@ -369,22 +220,23 @@ void PostManagementPage::setupTable()
         QStringLiteral("Engagement")
     });
 
-    postTable->setSelectionBehavior(QAbstractItemView::SelectRows);
-    postTable->setSelectionMode(QAbstractItemView::SingleSelection);
-    postTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    postTable->verticalHeader()->setVisible(false);
-    postTable->horizontalHeader()->setStretchLastSection(true);
-    postTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
+    ui->postTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    ui->postTable->setSelectionMode(QAbstractItemView::SingleSelection);
+    ui->postTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    ui->postTable->setAlternatingRowColors(true);
+    ui->postTable->verticalHeader()->setVisible(false);
+    ui->postTable->horizontalHeader()->setStretchLastSection(true);
+    ui->postTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
 }
 
 void PostManagementPage::refreshPosts()
 {
-    const QString platform = searchPlatformComboBox
-                                 ? searchPlatformComboBox->currentData().toString()
+    const QString platform = ui->searchPlatformComboBox
+                                 ? ui->searchPlatformComboBox->currentData().toString()
                                  : QString();
 
-    const QString keyword = keywordLineEdit
-                                ? keywordLineEdit->text().trimmed()
+    const QString keyword = ui->keywordLineEdit
+                                ? ui->keywordLineEdit->text().trimmed()
                                 : QString();
 
     fillTable(postRepository.findPosts(platform, keyword));
@@ -392,7 +244,7 @@ void PostManagementPage::refreshPosts()
 
 void PostManagementPage::fillTable(const QList<Post>& posts)
 {
-    postTable->setRowCount(posts.size());
+    ui->postTable->setRowCount(posts.size());
 
     for (int row = 0; row < posts.size(); ++row) {
         const Post post = posts.at(row);
@@ -420,16 +272,16 @@ void PostManagementPage::fillTable(const QList<Post>& posts)
                 item->setTextAlignment(Qt::AlignCenter);
             }
 
-            postTable->setItem(row, column, item);
+            ui->postTable->setItem(row, column, item);
         }
     }
 
-    setMessage(QStringLiteral("Loaded %1 post records.").arg(posts.size()));
+    setMessage(QStringLiteral("Loaded %1 post records. Double-click one row to edit it.").arg(posts.size()));
 }
 
 void PostManagementPage::onAddPostClicked()
 {
-    const Post post = readPostFromForm();
+    Post post = readPostFromForm();
 
     QString message;
     if (!validatePostInput(post, message)) {
@@ -458,7 +310,7 @@ void PostManagementPage::onAddPostClicked()
             QStringLiteral("failed")
             );
 
-        QMessageBox::warning(this, QStringLiteral("Add Failed"), messageLabel->text());
+        QMessageBox::warning(this, QStringLiteral("Add Failed"), ui->messageLabel->text());
         return;
     }
 
@@ -478,6 +330,70 @@ void PostManagementPage::onAddPostClicked()
     resetForm();
     refreshPosts();
     setMessage(QStringLiteral("Post added successfully."));
+}
+
+void PostManagementPage::onUpdatePostClicked()
+{
+    if (editingPostId <= 0) {
+        QMessageBox::information(
+            this,
+            QStringLiteral("No Editing Post"),
+            QStringLiteral("Please double-click one row in the table first.")
+            );
+
+        return;
+    }
+
+    Post post = readPostFromForm();
+    post.postId = editingPostId;
+
+    QString message;
+    if (!validatePostInput(post, message)) {
+        setMessage(message, true);
+
+        writePostOperationLog(
+            QStringLiteral("update_post"),
+            QStringLiteral("Update post failed: %1 Post ID: %2")
+                .arg(message)
+                .arg(editingPostId),
+            QStringLiteral("failed")
+            );
+
+        QMessageBox::warning(this, QStringLiteral("Invalid Input"), message);
+        return;
+    }
+
+    if (!postRepository.updatePost(post)) {
+        const QString errorMessage = QStringLiteral("Failed to update post. The record may have been deleted.");
+        setMessage(errorMessage, true);
+
+        writePostOperationLog(
+            QStringLiteral("update_post"),
+            QStringLiteral("Update post failed. Post ID: %1").arg(editingPostId),
+            QStringLiteral("failed")
+            );
+
+        QMessageBox::warning(this, QStringLiteral("Update Failed"), errorMessage);
+        return;
+    }
+
+    writePostOperationLog(
+        QStringLiteral("update_post"),
+        QStringLiteral("Update post successful. Post ID: %1, Platform: %2, Account: %3, Date: %4, Likes: %5, Comments: %6, Shares: %7, Views: %8")
+            .arg(post.postId)
+            .arg(post.platform,
+                 post.accountName,
+                 post.publishDate.toString(QStringLiteral("yyyy-MM-dd")))
+            .arg(post.likes)
+            .arg(post.comments)
+            .arg(post.shares)
+            .arg(post.views),
+        QStringLiteral("success")
+        );
+
+    resetForm();
+    refreshPosts();
+    setMessage(QStringLiteral("Post updated successfully."));
 }
 
 void PostManagementPage::onDeletePostClicked()
@@ -512,7 +428,7 @@ void PostManagementPage::onDeletePostClicked()
             QStringLiteral("failed")
             );
 
-        QMessageBox::warning(this, QStringLiteral("Delete Failed"), messageLabel->text());
+        QMessageBox::warning(this, QStringLiteral("Delete Failed"), ui->messageLabel->text());
         return;
     }
 
@@ -521,6 +437,10 @@ void PostManagementPage::onDeletePostClicked()
         QStringLiteral("Delete post successful. Post ID: %1").arg(postId),
         QStringLiteral("success")
         );
+
+    if (editingPostId == postId) {
+        clearEditingState();
+    }
 
     refreshPosts();
     setMessage(QStringLiteral("Post deleted successfully."));
@@ -533,8 +453,8 @@ void PostManagementPage::onSearchClicked()
 
 void PostManagementPage::onResetSearchClicked()
 {
-    searchPlatformComboBox->setCurrentIndex(0);
-    keywordLineEdit->clear();
+    ui->searchPlatformComboBox->setCurrentIndex(0);
+    ui->keywordLineEdit->clear();
     refreshPosts();
 }
 
@@ -593,7 +513,6 @@ void PostManagementPage::onImportCsvClicked()
 
         const QStringList fields = splitCsvLine(line);
 
-        // 第一行通常是表头。这里同时支持标准帖子 CSV 和 Bilibili 趋势 CSV。
         if (csvFormat == CsvFormat::Unknown) {
             csvFormat = detectCsvFormat(fields);
 
@@ -601,11 +520,9 @@ void PostManagementPage::onImportCsvClicked()
                 continue;
             }
 
-            // 没有表头时，默认按我们自己的 8 列帖子格式处理。
             csvFormat = CsvFormat::StandardPost;
         }
 
-        // Bilibili 导出的第二行是“累计”，它不是某一天的数据，不能当帖子记录导入。
         if (csvFormat == CsvFormat::BilibiliTrend
             && cleanCsvField(fields.value(0)) == QStringLiteral("累计")) {
             continue;
@@ -661,18 +578,59 @@ void PostManagementPage::onImportCsvClicked()
     setMessage(resultMessage, hasFailedRows);
 }
 
+void PostManagementPage::onTableCellDoubleClicked(int row, int column)
+{
+    Q_UNUSED(column)
+
+    if (row < 0) {
+        return;
+    }
+
+    const QTableWidgetItem *idItem = ui->postTable->item(row, 0);
+
+    if (!idItem) {
+        return;
+    }
+
+    const int postId = idItem->text().toInt();
+
+    if (postId <= 0) {
+        return;
+    }
+
+    const Post post = postRepository.findPostById(postId);
+
+    if (!post.isValid()) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("Load Failed"),
+            QStringLiteral("The selected post record does not exist.")
+            );
+
+        refreshPosts();
+        return;
+    }
+
+    loadPostToForm(post);
+
+    setMessage(
+        QStringLiteral("Editing post ID %1. Modify the form and click Update Selected.")
+            .arg(post.postId)
+        );
+}
+
 Post PostManagementPage::readPostFromForm() const
 {
     Post post;
 
-    post.platform = platformComboBox->currentText();
-    post.accountName = accountLineEdit->text();
-    post.content = contentLineEdit->text();
-    post.publishDate = publishDateEdit->date();
-    post.likes = likesSpinBox->value();
-    post.comments = commentsSpinBox->value();
-    post.shares = sharesSpinBox->value();
-    post.views = viewsSpinBox->value();
+    post.platform = ui->platformComboBox->currentText();
+    post.accountName = ui->accountLineEdit->text();
+    post.content = ui->contentLineEdit->text();
+    post.publishDate = ui->publishDateEdit->date();
+    post.likes = ui->likesSpinBox->value();
+    post.comments = ui->commentsSpinBox->value();
+    post.shares = ui->sharesSpinBox->value();
+    post.views = ui->viewsSpinBox->value();
 
     return post;
 }
@@ -705,27 +663,66 @@ bool PostManagementPage::validatePostInput(const Post& post,
 
 void PostManagementPage::resetForm()
 {
-    platformComboBox->setCurrentIndex(0);
-    accountLineEdit->clear();
-    contentLineEdit->clear();
-    publishDateEdit->setDate(QDate::currentDate());
-    likesSpinBox->setValue(0);
-    commentsSpinBox->setValue(0);
-    sharesSpinBox->setValue(0);
-    viewsSpinBox->setValue(0);
-    accountLineEdit->setFocus();
+    ui->platformComboBox->setCurrentIndex(0);
+    ui->accountLineEdit->clear();
+    ui->contentLineEdit->clear();
+    ui->publishDateEdit->setDate(QDate::currentDate());
+    ui->likesSpinBox->setValue(0);
+    ui->commentsSpinBox->setValue(0);
+    ui->sharesSpinBox->setValue(0);
+    ui->viewsSpinBox->setValue(0);
+    ui->accountLineEdit->setFocus();
+
+    clearEditingState();
+}
+
+void PostManagementPage::loadPostToForm(const Post& post)
+{
+    editingPostId = post.postId;
+
+    int platformIndex = ui->platformComboBox->findText(post.platform);
+
+    if (platformIndex < 0) {
+        ui->platformComboBox->addItem(post.platform);
+        platformIndex = ui->platformComboBox->findText(post.platform);
+    }
+
+    ui->platformComboBox->setCurrentIndex(platformIndex);
+    ui->accountLineEdit->setText(post.accountName);
+    ui->contentLineEdit->setText(post.content);
+    ui->publishDateEdit->setDate(post.publishDate);
+    ui->likesSpinBox->setValue(post.likes);
+    ui->commentsSpinBox->setValue(post.comments);
+    ui->sharesSpinBox->setValue(post.shares);
+    ui->viewsSpinBox->setValue(post.views);
+
+    ui->updateButton->setEnabled(true);
+    ui->addButton->setEnabled(false);
+}
+
+void PostManagementPage::clearEditingState()
+{
+    editingPostId = -1;
+
+    if (ui->updateButton) {
+        ui->updateButton->setEnabled(false);
+    }
+
+    if (ui->addButton) {
+        ui->addButton->setEnabled(true);
+    }
 }
 
 int PostManagementPage::selectedPostId() const
 {
-    const QList<QTableWidgetItem*> selectedItems = postTable->selectedItems();
+    const QList<QTableWidgetItem*> selectedItems = ui->postTable->selectedItems();
 
     if (selectedItems.isEmpty()) {
         return -1;
     }
 
     const int row = selectedItems.first()->row();
-    const QTableWidgetItem *idItem = postTable->item(row, 0);
+    const QTableWidgetItem *idItem = ui->postTable->item(row, 0);
 
     if (!idItem) {
         return -1;
@@ -737,13 +734,8 @@ int PostManagementPage::selectedPostId() const
 void PostManagementPage::setMessage(const QString& message,
                                     bool error)
 {
-    messageLabel->setText(message);
-
-    messageLabel->setStyleSheet(
-        error
-            ? QStringLiteral("color: #DC2626;")
-            : QStringLiteral("color: #374151;")
-        );
+    ui->messageLabel->setText(message);
+    ui->messageLabel->setStyleSheet(AppStyle::messageLabelStyle(error));
 }
 
 int PostManagementPage::currentOperatorId() const
@@ -777,11 +769,12 @@ QString PostManagementPage::cleanCsvField(const QString& value) const
 {
     QString field = value.trimmed();
 
-    // 有些 CSV 第一列前面会带 UTF-8 BOM，不去掉会影响表头识别。
+    // 去掉 UTF-8 BOM，避免 CSV 第一列头部出现不可见字符。
     if (!field.isEmpty() && field.at(0).unicode() == 0xFEFF) {
         field.remove(0, 1);
     }
 
+    // 支持 "a,b" 这种带引号的 CSV 字段，并把 CSV 转义的 "" 还原为 "。
     if (field.size() >= 2
         && field.startsWith(QChar('"'))
         && field.endsWith(QChar('"'))) {
@@ -794,7 +787,6 @@ QString PostManagementPage::cleanCsvField(const QString& value) const
 
 QStringList PostManagementPage::splitCsvLine(const QString& line) const
 {
-    // 这里比普通 split(',') 稍微稳一点：可以处理带英文逗号的引号字段。
     QStringList fields;
     QString current;
     bool inQuotes = false;
@@ -825,7 +817,7 @@ QDate PostManagementPage::parseCsvDate(const QString& value) const
 {
     QString dateText = cleanCsvField(value);
 
-    // 如果以后 CSV 中出现“2026/05/01 12:00:00”，这里只取日期部分。
+    // 有些 CSV 日期会带时间，例如 2026-05-25 12:00:00，这里只保留日期部分。
     if (dateText.contains(QChar(' '))) {
         dateText = dateText.section(QChar(' '), 0, 0);
     }
@@ -858,12 +850,14 @@ PostManagementPage::CsvFormat PostManagementPage::detectCsvFormat(const QStringL
 
     const QString joinedHeader = headers.join(QStringLiteral(","));
 
+    // 通用帖子 CSV：platform, account, content, date, likes, comments, shares, views
     if (joinedHeader.contains(QStringLiteral("platform"))
         && joinedHeader.contains(QStringLiteral("account"))
         && joinedHeader.contains(QStringLiteral("views"))) {
         return CsvFormat::StandardPost;
     }
 
+    // Bilibili 趋势 CSV：按中文表头识别。
     if (joinedHeader.contains(QStringLiteral("时间"))
         && joinedHeader.contains(QStringLiteral("播放量"))
         && joinedHeader.contains(QStringLiteral("点赞"))) {
@@ -914,11 +908,10 @@ bool PostManagementPage::buildPostFromCsvFields(const QStringList& fields,
         post.accountName = QStringLiteral("Bilibili Video");
         post.content = QStringLiteral("Bilibili playback trend - %1").arg(dateText);
         post.publishDate = parseCsvDate(dateText);
-        post.views = csvNumber(fields.at(1));       // 播放量
-        post.likes = csvNumber(fields.at(4));       // 点赞
-        post.comments = csvNumber(fields.at(5))     // 弹幕
-                        + csvNumber(fields.at(6));  // 评论
-        post.shares = csvNumber(fields.at(7));      // 分享
+        post.views = csvNumber(fields.at(1));
+        post.likes = csvNumber(fields.at(4));
+        post.comments = csvNumber(fields.at(5)) + csvNumber(fields.at(6));
+        post.shares = csvNumber(fields.at(7));
 
         return validatePostInput(post, message);
     }

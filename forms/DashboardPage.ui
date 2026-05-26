@@ -1,0 +1,481 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>DashboardPage</class>
+ <widget class="QWidget" name="DashboardPage">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>980</width>
+    <height>720</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Dashboard</string>
+  </property>
+
+  <layout class="QVBoxLayout" name="rootLayout">
+   <property name="spacing">
+    <number>18</number>
+   </property>
+   <property name="leftMargin">
+    <number>24</number>
+   </property>
+   <property name="topMargin">
+    <number>22</number>
+   </property>
+   <property name="rightMargin">
+    <number>24</number>
+   </property>
+   <property name="bottomMargin">
+    <number>24</number>
+   </property>
+
+   <item>
+    <widget class="QLabel" name="welcomeLabel">
+     <property name="text">
+      <string>Welcome back</string>
+     </property>
+    </widget>
+   </item>
+
+   <item>
+    <widget class="QLabel" name="subtitleLabel">
+     <property name="text">
+      <string>Here is the latest overview of your local social media data.</string>
+     </property>
+     <property name="wordWrap">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+
+   <item>
+    <layout class="QGridLayout" name="summaryGrid">
+     <property name="horizontalSpacing">
+      <number>16</number>
+     </property>
+     <property name="verticalSpacing">
+      <number>16</number>
+     </property>
+
+     <item row="0" column="0">
+      <widget class="QFrame" name="totalPostsCard">
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>116</height>
+        </size>
+       </property>
+       <property name="frameShape">
+        <enum>QFrame::StyledPanel</enum>
+       </property>
+       <property name="frameShadow">
+        <enum>QFrame::Raised</enum>
+       </property>
+
+       <layout class="QVBoxLayout" name="totalPostsCardLayout">
+        <property name="leftMargin">
+         <number>18</number>
+        </property>
+        <property name="topMargin">
+         <number>16</number>
+        </property>
+        <property name="rightMargin">
+         <number>18</number>
+        </property>
+        <property name="bottomMargin">
+         <number>16</number>
+        </property>
+        <property name="spacing">
+         <number>8</number>
+        </property>
+
+        <item>
+         <widget class="QLabel" name="totalPostsTitleLabel">
+          <property name="text">
+           <string>Total Posts</string>
+          </property>
+         </widget>
+        </item>
+
+        <item>
+         <widget class="QLabel" name="totalPostsValueLabel">
+          <property name="text">
+           <string>0</string>
+          </property>
+         </widget>
+        </item>
+
+        <item>
+         <widget class="QLabel" name="totalPostsDescriptionLabel">
+          <property name="text">
+           <string>All imported or manually added posts</string>
+          </property>
+          <property name="wordWrap">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+
+        <item>
+         <spacer name="totalPostsSpacer">
+          <property name="orientation">
+           <enum>Qt::Vertical</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>20</width>
+            <height>10</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </widget>
+     </item>
+
+     <item row="0" column="1">
+      <widget class="QFrame" name="interactionsCard">
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>116</height>
+        </size>
+       </property>
+       <property name="frameShape">
+        <enum>QFrame::StyledPanel</enum>
+       </property>
+       <property name="frameShadow">
+        <enum>QFrame::Raised</enum>
+       </property>
+
+       <layout class="QVBoxLayout" name="interactionsCardLayout">
+        <property name="leftMargin">
+         <number>18</number>
+        </property>
+        <property name="topMargin">
+         <number>16</number>
+        </property>
+        <property name="rightMargin">
+         <number>18</number>
+        </property>
+        <property name="bottomMargin">
+         <number>16</number>
+        </property>
+        <property name="spacing">
+         <number>8</number>
+        </property>
+
+        <item>
+         <widget class="QLabel" name="interactionsTitleLabel">
+          <property name="text">
+           <string>Interactions</string>
+          </property>
+         </widget>
+        </item>
+
+        <item>
+         <widget class="QLabel" name="interactionsValueLabel">
+          <property name="text">
+           <string>0</string>
+          </property>
+         </widget>
+        </item>
+
+        <item>
+         <widget class="QLabel" name="interactionsDescriptionLabel">
+          <property name="text">
+           <string>Likes + comments + shares</string>
+          </property>
+          <property name="wordWrap">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+
+        <item>
+         <spacer name="interactionsSpacer">
+          <property name="orientation">
+           <enum>Qt::Vertical</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>20</width>
+            <height>10</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </widget>
+     </item>
+
+     <item row="0" column="2">
+      <widget class="QFrame" name="viewsCard">
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>116</height>
+        </size>
+       </property>
+       <property name="frameShape">
+        <enum>QFrame::StyledPanel</enum>
+       </property>
+       <property name="frameShadow">
+        <enum>QFrame::Raised</enum>
+       </property>
+
+       <layout class="QVBoxLayout" name="viewsCardLayout">
+        <property name="leftMargin">
+         <number>18</number>
+        </property>
+        <property name="topMargin">
+         <number>16</number>
+        </property>
+        <property name="rightMargin">
+         <number>18</number>
+        </property>
+        <property name="bottomMargin">
+         <number>16</number>
+        </property>
+        <property name="spacing">
+         <number>8</number>
+        </property>
+
+        <item>
+         <widget class="QLabel" name="viewsTitleLabel">
+          <property name="text">
+           <string>Views</string>
+          </property>
+         </widget>
+        </item>
+
+        <item>
+         <widget class="QLabel" name="viewsValueLabel">
+          <property name="text">
+           <string>0</string>
+          </property>
+         </widget>
+        </item>
+
+        <item>
+         <widget class="QLabel" name="viewsDescriptionLabel">
+          <property name="text">
+           <string>Total exposure or view count</string>
+          </property>
+          <property name="wordWrap">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+
+        <item>
+         <spacer name="viewsSpacer">
+          <property name="orientation">
+           <enum>Qt::Vertical</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>20</width>
+            <height>10</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </widget>
+     </item>
+
+     <item row="0" column="3">
+      <widget class="QFrame" name="engagementCard">
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>116</height>
+        </size>
+       </property>
+       <property name="frameShape">
+        <enum>QFrame::StyledPanel</enum>
+       </property>
+       <property name="frameShadow">
+        <enum>QFrame::Raised</enum>
+       </property>
+
+       <layout class="QVBoxLayout" name="engagementCardLayout">
+        <property name="leftMargin">
+         <number>18</number>
+        </property>
+        <property name="topMargin">
+         <number>16</number>
+        </property>
+        <property name="rightMargin">
+         <number>18</number>
+        </property>
+        <property name="bottomMargin">
+         <number>16</number>
+        </property>
+        <property name="spacing">
+         <number>8</number>
+        </property>
+
+        <item>
+         <widget class="QLabel" name="engagementTitleLabel">
+          <property name="text">
+           <string>Engagement Rate</string>
+          </property>
+         </widget>
+        </item>
+
+        <item>
+         <widget class="QLabel" name="engagementValueLabel">
+          <property name="text">
+           <string>0.00%</string>
+          </property>
+         </widget>
+        </item>
+
+        <item>
+         <widget class="QLabel" name="engagementDescriptionLabel">
+          <property name="text">
+           <string>Interactions divided by views</string>
+          </property>
+          <property name="wordWrap">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+
+        <item>
+         <spacer name="engagementSpacer">
+          <property name="orientation">
+           <enum>Qt::Vertical</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>20</width>
+            <height>10</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </widget>
+     </item>
+    </layout>
+   </item>
+
+   <item>
+    <widget class="QFrame" name="topPostCard">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>110</height>
+      </size>
+     </property>
+     <property name="frameShape">
+      <enum>QFrame::StyledPanel</enum>
+     </property>
+     <property name="frameShadow">
+      <enum>QFrame::Raised</enum>
+     </property>
+
+     <layout class="QVBoxLayout" name="topPostCardLayout">
+      <property name="leftMargin">
+       <number>20</number>
+      </property>
+      <property name="topMargin">
+       <number>18</number>
+      </property>
+      <property name="rightMargin">
+       <number>20</number>
+      </property>
+      <property name="bottomMargin">
+       <number>18</number>
+      </property>
+      <property name="spacing">
+       <number>10</number>
+      </property>
+
+      <item>
+       <widget class="QLabel" name="topPostPanelTitleLabel">
+        <property name="text">
+         <string>Top Post</string>
+        </property>
+       </widget>
+      </item>
+
+      <item>
+       <widget class="QLabel" name="topPostTitleLabel">
+        <property name="text">
+         <string>No post data yet.</string>
+        </property>
+        <property name="wordWrap">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+
+      <item>
+       <widget class="QLabel" name="topPostDetailLabel">
+        <property name="text">
+         <string>Add post data in Post Data page first.</string>
+        </property>
+        <property name="wordWrap">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <item>
+    <widget class="QFrame" name="recentPostsCard">
+     <property name="frameShape">
+      <enum>QFrame::StyledPanel</enum>
+     </property>
+     <property name="frameShadow">
+      <enum>QFrame::Raised</enum>
+     </property>
+
+     <layout class="QVBoxLayout" name="recentPostsCardLayout">
+      <property name="leftMargin">
+       <number>20</number>
+      </property>
+      <property name="topMargin">
+       <number>18</number>
+      </property>
+      <property name="rightMargin">
+       <number>20</number>
+      </property>
+      <property name="bottomMargin">
+       <number>18</number>
+      </property>
+      <property name="spacing">
+       <number>12</number>
+      </property>
+
+      <item>
+       <widget class="QLabel" name="recentPostsPanelTitleLabel">
+        <property name="text">
+         <string>Recent Posts</string>
+        </property>
+       </widget>
+      </item>
+
+      <item>
+       <widget class="QTableWidget" name="recentPostsTable">
+        <property name="alternatingRowColors">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

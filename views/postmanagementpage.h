@@ -6,34 +6,27 @@
 #include "../services/logservice.h"
 #include "../services/postrepository.h"
 
-#include <QWidget>
+#include <QDate>
+#include <QList>
 #include <QStringList>
+#include <QWidget>
 
-class QComboBox;
-class QDateEdit;
-class QFrame;
-class QGridLayout;
-class QLabel;
-class QLineEdit;
-class QPushButton;
-class QSpinBox;
-class QTableWidget;
+QT_BEGIN_NAMESPACE
+namespace Ui {
+class PostManagementPage;
+}
+QT_END_NAMESPACE
 
 /*
  * 帖子数据管理页面。
  *
- * 负责：
- * - 新增社交媒体帖子数据；
- * - 按平台和关键词查询；
- * - 表格展示帖子列表；
- * - 删除选中的帖子；
- * - 从 CSV 文件批量导入数据；
- * - 记录帖子新增、删除、CSV 导入日志。
+ * 当前版本采用 “postmanagementpage.ui + postmanagementpage.cpp” 分工：
+ * - forms/postmanagementpage.ui：只负责固定界面结构和控件摆放；
+ * - views/postmanagementpage.cpp：只负责控件初始化、信号槽、数据库操作、CSV 导入和日志记录；
+ * - services/AppStyle：统一管理页面 QSS 样式。
  *
- * 不负责：
- * - 统计分析计算；
- * - Dashboard 展示；
- * - 用户登录验证。
+ * 这样可以减少本 cpp 中大量 new 控件、new layout、addWidget 代码，
+ * 后续继续调整 UI 时，也可以优先在 Qt Designer 中拖控件完成。
  */
 class PostManagementPage : public QWidget
 {
@@ -41,6 +34,7 @@ class PostManagementPage : public QWidget
 
 public:
     explicit PostManagementPage(QWidget *parent = nullptr);
+    ~PostManagementPage();
 
     // 主窗口在登录成功后调用，用于记录当前操作人。
     void setCurrentUser(const User& user);
@@ -51,10 +45,12 @@ public slots:
 
 private slots:
     void onAddPostClicked();
+    void onUpdatePostClicked();
     void onDeletePostClicked();
     void onSearchClicked();
     void onResetSearchClicked();
     void onImportCsvClicked();
+    void onTableCellDoubleClicked(int row, int column);
 
 private:
     enum class CsvFormat
@@ -64,106 +60,75 @@ private:
         BilibiliTrend
     };
 
-    // 创建页面整体布局。
-    void buildUi();
+    // 初始化 .ui 中已有控件的运行时属性，例如下拉框数据、按钮样式名、日期默认值。
+    void prepareUiObjects();
 
-    // 当前页面统一样式。
+    // 连接 .ui 中控件的信号槽。
+    void connectSignals();
+
+    // 应用统一样式，具体 QSS 不写在本类中。
     void applyStyleSheet();
 
-    // 创建新增帖子表单卡片。
-    QFrame* createFormCard();
-
-    // 创建查询和表格区域。
-    QFrame* createTableCard();
-
-    // 创建字段名，统一样式。
-    QLabel* createFieldLabel(const QString& text);
-
-    // 添加一行表单项。
-    void addFormRow(QGridLayout *layout,
-                    int row,
-                    const QString& labelText,
-                    QWidget *field);
-
-    // 初始化表格列。
+    // 初始化帖子表格的列名、选择模式和列宽策略。
     void setupTable();
 
-    // 把查询结果填充到表格。
+    // 把数据库查询结果填入表格。
     void fillTable(const QList<Post>& posts);
 
-    // 从表单读取帖子数据。
+    // 从表单控件读取一条帖子数据。
     Post readPostFromForm() const;
 
-    // 表单输入校验。
+    // 校验帖子表单输入是否合法。
     bool validatePostInput(const Post& post,
                            QString& message) const;
 
-    // 清空新增表单。
+    // 清空表单，并退出编辑状态。
     void resetForm();
 
-    // 获取当前选中的帖子 ID。
+    // 将一条数据库帖子加载到表单，用于修改。
+    void loadPostToForm(const Post& post);
+
+    // 退出编辑状态。
+    void clearEditingState();
+
+    // 获取当前表格选中的帖子 ID。
     int selectedPostId() const;
 
-    // 页面内提示信息统一从这里设置。
+    // 设置页面底部提示；error=true 时显示红色错误样式。
     void setMessage(const QString& message,
                     bool error = false);
 
-    // 获取当前操作人 ID。未登录或未传入时返回 -1。
+    // 获取当前操作者信息，用于写操作日志。
     int currentOperatorId() const;
-
-    // 获取当前操作人用户名。未登录或未传入时返回 unknown。
     QString currentOperatorName() const;
 
-    // 统一写入帖子模块日志，避免每个槽函数重复写 userId 和 username。
+    // 写帖子相关操作日志。
     void writePostOperationLog(const QString& action,
                                const QString& detail,
                                const QString& result = QStringLiteral("success"));
 
-    // 清理 CSV 字段，比如去掉 BOM、引号和多余空格。
+    // CSV 解析相关工具函数。
     QString cleanCsvField(const QString& value) const;
-
-    // 解析一行 CSV，支持简单的引号字段。
     QStringList splitCsvLine(const QString& line) const;
-
-    // 解析 CSV 里的日期，同时支持 yyyy-MM-dd 和 yyyy/MM/dd。
     QDate parseCsvDate(const QString& value) const;
 
-    // 判断 CSV 是项目标准格式，还是 Bilibili 导出的趋势数据。
     CsvFormat detectCsvFormat(const QStringList& fields) const;
 
-    // 根据 CSV 字段创建 Post。
     bool buildPostFromCsvFields(const QStringList& fields,
                                 CsvFormat format,
                                 Post& post,
                                 QString& message) const;
 
 private:
+    Ui::PostManagementPage *ui;
+
     User currentUser;
 
     PostRepository postRepository;
     LogService logService;
 
-    QLabel *messageLabel;
-
-    QComboBox *platformComboBox;
-    QLineEdit *accountLineEdit;
-    QLineEdit *contentLineEdit;
-    QDateEdit *publishDateEdit;
-    QSpinBox *likesSpinBox;
-    QSpinBox *commentsSpinBox;
-    QSpinBox *sharesSpinBox;
-    QSpinBox *viewsSpinBox;
-    QPushButton *addButton;
-    QPushButton *clearButton;
-    QPushButton *importCsvButton;
-
-    QComboBox *searchPlatformComboBox;
-    QLineEdit *keywordLineEdit;
-    QPushButton *searchButton;
-    QPushButton *resetSearchButton;
-    QPushButton *deleteButton;
-    QPushButton *refreshButton;
-    QTableWidget *postTable;
+    // -1 表示当前不是编辑状态；大于 0 表示正在编辑某条帖子。
+    int editingPostId;
 };
 
 #endif // POSTMANAGEMENTPAGE_H

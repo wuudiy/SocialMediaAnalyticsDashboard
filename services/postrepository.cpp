@@ -39,6 +39,46 @@ bool PostRepository::insertPost(const Post& post)
     return true;
 }
 
+bool PostRepository::updatePost(const Post& post)
+{
+    if (post.postId <= 0) {
+        qDebug() << "Update post failed: invalid post id.";
+        return false;
+    }
+
+    QSqlQuery query(DatabaseManager::database());
+
+    query.prepare(
+        "UPDATE posts SET "
+        "platform = :platform, "
+        "account_name = :account_name, "
+        "content = :content, "
+        "publish_date = :publish_date, "
+        "likes = :likes, "
+        "comments = :comments, "
+        "shares = :shares, "
+        "views = :views "
+        "WHERE post_id = :post_id"
+        );
+
+    query.bindValue(":platform", post.platform.trimmed());
+    query.bindValue(":account_name", post.accountName.trimmed());
+    query.bindValue(":content", post.content.trimmed());
+    query.bindValue(":publish_date", post.publishDate.toString(Qt::ISODate));
+    query.bindValue(":likes", post.likes);
+    query.bindValue(":comments", post.comments);
+    query.bindValue(":shares", post.shares);
+    query.bindValue(":views", post.views);
+    query.bindValue(":post_id", post.postId);
+
+    if (!query.exec()) {
+        qDebug() << "Update post failed:" << query.lastError().text();
+        return false;
+    }
+
+    return query.numRowsAffected() > 0;
+}
+
 bool PostRepository::deletePostById(int postId)
 {
     QSqlQuery query(DatabaseManager::database());
@@ -56,6 +96,38 @@ bool PostRepository::deletePostById(int postId)
     }
 
     return query.numRowsAffected() > 0;
+}
+
+Post PostRepository::findPostById(int postId)
+{
+    Post post;
+
+    if (postId <= 0) {
+        return post;
+    }
+
+    QSqlQuery query(DatabaseManager::database());
+
+    query.prepare(
+        "SELECT post_id, platform, account_name, content, publish_date, "
+        "likes, comments, shares, views "
+        "FROM posts "
+        "WHERE post_id = :post_id "
+        "LIMIT 1"
+        );
+
+    query.bindValue(":post_id", postId);
+
+    if (!query.exec()) {
+        qDebug() << "Find post by id failed:" << query.lastError().text();
+        return post;
+    }
+
+    if (query.next()) {
+        post = buildPostFromQuery(query);
+    }
+
+    return post;
 }
 
 QList<Post> PostRepository::findPosts(const QString& platform,
