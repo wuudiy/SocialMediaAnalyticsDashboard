@@ -3,6 +3,7 @@
 
 #include "../services/appstyle.h"
 
+#include "analyticspage.h"
 #include "dashboardpage.h"
 #include "logpage.h"
 #include "postmanagementpage.h"
@@ -97,10 +98,7 @@ void MainWindow::setupPages()
     dashboardPage = new DashboardPage(ui->pageStack);
     postManagementPage = new PostManagementPage(ui->pageStack);
 
-    analyticsPage = createPlaceholderPage(
-        QStringLiteral("Analytics"),
-        QStringLiteral("Trend analysis, platform comparison and advanced metrics will be placed here.")
-        );
+    analyticsPage = new AnalyticsPage(ui->pageStack);
 
     userManagementPage = new UserManagementPage(ui->pageStack);
     logPage = new LogPage(ui->pageStack);
@@ -260,6 +258,8 @@ void MainWindow::showPostManagementPage()
  */
 void MainWindow::showAnalyticsPage()
 {
+    analyticsPage->refreshData();
+
     navigateTo(
         analyticsPage,
         QStringLiteral("Analytics"),

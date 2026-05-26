@@ -11,6 +11,7 @@ class MainWindow;
 }
 QT_END_NAMESPACE
 
+class AnalyticsPage;
 class DashboardPage;
 class LogPage;
 class PostManagementPage;
@@ -78,7 +79,7 @@ private:
 
     DashboardPage *dashboardPage;
     PostManagementPage *postManagementPage;
-    QWidget *analyticsPage;
+    AnalyticsPage *analyticsPage;
     UserManagementPage *userManagementPage;
     LogPage *logPage;
     QWidget *settingsPage;

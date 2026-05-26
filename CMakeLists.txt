@@ -59,6 +59,8 @@ set(PROJECT_SOURCES
     views/mainwindow.cpp
     views/usermanagementpage.h
     views/usermanagementpage.cpp
+    views/analyticspage.h
+    views/analyticspage.cpp
 
     forms/LoginForm.ui
     forms/mainwindow.ui
@@ -66,6 +68,7 @@ set(PROJECT_SOURCES
     forms/UserManagementPage.ui
     forms/LogPage.ui
     forms/DashboardPage.ui
+    forms/AnalyticsPage.ui
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
