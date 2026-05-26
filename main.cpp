@@ -5,6 +5,11 @@
 #include <QApplication>
 #include <QMessageBox>
 
+#include <QCoreApplication>
+#include <QSqlDatabase>
+#include <QDebug>
+
+
 /*
  * 程序入口。
  *
@@ -51,3 +56,6 @@ int main(int argc, char *argv[])
 
     return exitCode;
 }
+
+
+
