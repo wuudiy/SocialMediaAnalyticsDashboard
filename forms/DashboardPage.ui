@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>980</width>
-    <height>720</height>
+    <width>1100</width>
+    <height>780</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -32,22 +32,66 @@
    </property>
 
    <item>
-    <widget class="QLabel" name="welcomeLabel">
-     <property name="text">
-      <string>Welcome back</string>
+    <layout class="QHBoxLayout" name="headerLayout">
+     <property name="spacing">
+      <number>12</number>
      </property>
-    </widget>
-   </item>
 
-   <item>
-    <widget class="QLabel" name="subtitleLabel">
-     <property name="text">
-      <string>Here is the latest overview of your local social media data.</string>
-     </property>
-     <property name="wordWrap">
-      <bool>true</bool>
-     </property>
-    </widget>
+     <item>
+      <layout class="QVBoxLayout" name="headerTextLayout">
+       <property name="spacing">
+        <number>6</number>
+       </property>
+
+       <item>
+        <widget class="QLabel" name="welcomeLabel">
+         <property name="text">
+          <string>Welcome back</string>
+         </property>
+        </widget>
+       </item>
+
+       <item>
+        <widget class="QLabel" name="subtitleLabel">
+         <property name="text">
+          <string>Visual overview of posts, interactions, platform distribution and recent trends.</string>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </item>
+
+     <item>
+      <spacer name="headerSpacer">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+
+     <item>
+      <widget class="QPushButton" name="refreshButton">
+       <property name="text">
+        <string>Refresh</string>
+       </property>
+       <property name="minimumSize">
+        <size>
+         <width>100</width>
+         <height>36</height>
+        </size>
+       </property>
+      </widget>
+     </item>
+    </layout>
    </item>
 
    <item>
@@ -73,63 +117,28 @@
        <property name="frameShadow">
         <enum>QFrame::Raised</enum>
        </property>
-
        <layout class="QVBoxLayout" name="totalPostsCardLayout">
-        <property name="leftMargin">
-         <number>18</number>
-        </property>
-        <property name="topMargin">
-         <number>16</number>
-        </property>
-        <property name="rightMargin">
-         <number>18</number>
-        </property>
-        <property name="bottomMargin">
-         <number>16</number>
-        </property>
-        <property name="spacing">
-         <number>8</number>
-        </property>
+        <property name="leftMargin"><number>18</number></property>
+        <property name="topMargin"><number>16</number></property>
+        <property name="rightMargin"><number>18</number></property>
+        <property name="bottomMargin"><number>16</number></property>
+        <property name="spacing"><number>8</number></property>
 
         <item>
          <widget class="QLabel" name="totalPostsTitleLabel">
-          <property name="text">
-           <string>Total Posts</string>
-          </property>
+          <property name="text"><string>Total Posts</string></property>
          </widget>
         </item>
-
         <item>
          <widget class="QLabel" name="totalPostsValueLabel">
-          <property name="text">
-           <string>0</string>
-          </property>
+          <property name="text"><string>0</string></property>
          </widget>
         </item>
-
         <item>
          <widget class="QLabel" name="totalPostsDescriptionLabel">
-          <property name="text">
-           <string>All imported or manually added posts</string>
-          </property>
-          <property name="wordWrap">
-           <bool>true</bool>
-          </property>
+          <property name="text"><string>All stored social media posts</string></property>
+          <property name="wordWrap"><bool>true</bool></property>
          </widget>
-        </item>
-
-        <item>
-         <spacer name="totalPostsSpacer">
-          <property name="orientation">
-           <enum>Qt::Vertical</enum>
-          </property>
-          <property name="sizeHint" stdset="0">
-           <size>
-            <width>20</width>
-            <height>10</height>
-           </size>
-          </property>
-         </spacer>
         </item>
        </layout>
       </widget>
@@ -143,69 +152,30 @@
          <height>116</height>
         </size>
        </property>
-       <property name="frameShape">
-        <enum>QFrame::StyledPanel</enum>
-       </property>
-       <property name="frameShadow">
-        <enum>QFrame::Raised</enum>
-       </property>
-
+       <property name="frameShape"><enum>QFrame::StyledPanel</enum></property>
+       <property name="frameShadow"><enum>QFrame::Raised</enum></property>
        <layout class="QVBoxLayout" name="interactionsCardLayout">
-        <property name="leftMargin">
-         <number>18</number>
-        </property>
-        <property name="topMargin">
-         <number>16</number>
-        </property>
-        <property name="rightMargin">
-         <number>18</number>
-        </property>
-        <property name="bottomMargin">
-         <number>16</number>
-        </property>
-        <property name="spacing">
-         <number>8</number>
-        </property>
+        <property name="leftMargin"><number>18</number></property>
+        <property name="topMargin"><number>16</number></property>
+        <property name="rightMargin"><number>18</number></property>
+        <property name="bottomMargin"><number>16</number></property>
+        <property name="spacing"><number>8</number></property>
 
         <item>
          <widget class="QLabel" name="interactionsTitleLabel">
-          <property name="text">
-           <string>Interactions</string>
-          </property>
+          <property name="text"><string>Interactions</string></property>
          </widget>
         </item>
-
         <item>
          <widget class="QLabel" name="interactionsValueLabel">
-          <property name="text">
-           <string>0</string>
-          </property>
+          <property name="text"><string>0</string></property>
          </widget>
         </item>
-
         <item>
          <widget class="QLabel" name="interactionsDescriptionLabel">
-          <property name="text">
-           <string>Likes + comments + shares</string>
-          </property>
-          <property name="wordWrap">
-           <bool>true</bool>
-          </property>
+          <property name="text"><string>Likes + comments + shares</string></property>
+          <property name="wordWrap"><bool>true</bool></property>
          </widget>
-        </item>
-
-        <item>
-         <spacer name="interactionsSpacer">
-          <property name="orientation">
-           <enum>Qt::Vertical</enum>
-          </property>
-          <property name="sizeHint" stdset="0">
-           <size>
-            <width>20</width>
-            <height>10</height>
-           </size>
-          </property>
-         </spacer>
         </item>
        </layout>
       </widget>
@@ -219,69 +189,30 @@
          <height>116</height>
         </size>
        </property>
-       <property name="frameShape">
-        <enum>QFrame::StyledPanel</enum>
-       </property>
-       <property name="frameShadow">
-        <enum>QFrame::Raised</enum>
-       </property>
-
+       <property name="frameShape"><enum>QFrame::StyledPanel</enum></property>
+       <property name="frameShadow"><enum>QFrame::Raised</enum></property>
        <layout class="QVBoxLayout" name="viewsCardLayout">
-        <property name="leftMargin">
-         <number>18</number>
-        </property>
-        <property name="topMargin">
-         <number>16</number>
-        </property>
-        <property name="rightMargin">
-         <number>18</number>
-        </property>
-        <property name="bottomMargin">
-         <number>16</number>
-        </property>
-        <property name="spacing">
-         <number>8</number>
-        </property>
+        <property name="leftMargin"><number>18</number></property>
+        <property name="topMargin"><number>16</number></property>
+        <property name="rightMargin"><number>18</number></property>
+        <property name="bottomMargin"><number>16</number></property>
+        <property name="spacing"><number>8</number></property>
 
         <item>
          <widget class="QLabel" name="viewsTitleLabel">
-          <property name="text">
-           <string>Views</string>
-          </property>
+          <property name="text"><string>Views</string></property>
          </widget>
         </item>
-
         <item>
          <widget class="QLabel" name="viewsValueLabel">
-          <property name="text">
-           <string>0</string>
-          </property>
+          <property name="text"><string>0</string></property>
          </widget>
         </item>
-
         <item>
          <widget class="QLabel" name="viewsDescriptionLabel">
-          <property name="text">
-           <string>Total exposure or view count</string>
-          </property>
-          <property name="wordWrap">
-           <bool>true</bool>
-          </property>
+          <property name="text"><string>Total exposure or views</string></property>
+          <property name="wordWrap"><bool>true</bool></property>
          </widget>
-        </item>
-
-        <item>
-         <spacer name="viewsSpacer">
-          <property name="orientation">
-           <enum>Qt::Vertical</enum>
-          </property>
-          <property name="sizeHint" stdset="0">
-           <size>
-            <width>20</width>
-            <height>10</height>
-           </size>
-          </property>
-         </spacer>
         </item>
        </layout>
       </widget>
@@ -295,69 +226,30 @@
          <height>116</height>
         </size>
        </property>
-       <property name="frameShape">
-        <enum>QFrame::StyledPanel</enum>
-       </property>
-       <property name="frameShadow">
-        <enum>QFrame::Raised</enum>
-       </property>
-
+       <property name="frameShape"><enum>QFrame::StyledPanel</enum></property>
+       <property name="frameShadow"><enum>QFrame::Raised</enum></property>
        <layout class="QVBoxLayout" name="engagementCardLayout">
-        <property name="leftMargin">
-         <number>18</number>
-        </property>
-        <property name="topMargin">
-         <number>16</number>
-        </property>
-        <property name="rightMargin">
-         <number>18</number>
-        </property>
-        <property name="bottomMargin">
-         <number>16</number>
-        </property>
-        <property name="spacing">
-         <number>8</number>
-        </property>
+        <property name="leftMargin"><number>18</number></property>
+        <property name="topMargin"><number>16</number></property>
+        <property name="rightMargin"><number>18</number></property>
+        <property name="bottomMargin"><number>16</number></property>
+        <property name="spacing"><number>8</number></property>
 
         <item>
          <widget class="QLabel" name="engagementTitleLabel">
-          <property name="text">
-           <string>Engagement Rate</string>
-          </property>
+          <property name="text"><string>Engagement Rate</string></property>
          </widget>
         </item>
-
         <item>
          <widget class="QLabel" name="engagementValueLabel">
-          <property name="text">
-           <string>0.00%</string>
-          </property>
+          <property name="text"><string>0.00%</string></property>
          </widget>
         </item>
-
         <item>
          <widget class="QLabel" name="engagementDescriptionLabel">
-          <property name="text">
-           <string>Interactions divided by views</string>
-          </property>
-          <property name="wordWrap">
-           <bool>true</bool>
-          </property>
+          <property name="text"><string>Interactions divided by views</string></property>
+          <property name="wordWrap"><bool>true</bool></property>
          </widget>
-        </item>
-
-        <item>
-         <spacer name="engagementSpacer">
-          <property name="orientation">
-           <enum>Qt::Vertical</enum>
-          </property>
-          <property name="sizeHint" stdset="0">
-           <size>
-            <width>20</width>
-            <height>10</height>
-           </size>
-          </property>
-         </spacer>
         </item>
        </layout>
       </widget>
@@ -366,62 +258,153 @@
    </item>
 
    <item>
-    <widget class="QFrame" name="topPostCard">
+    <layout class="QGridLayout" name="chartsGrid">
+     <property name="horizontalSpacing"><number>16</number></property>
+     <property name="verticalSpacing"><number>16</number></property>
+
+     <item row="0" column="0">
+      <widget class="QFrame" name="platformPieCard">
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>260</height>
+        </size>
+       </property>
+       <property name="frameShape"><enum>QFrame::StyledPanel</enum></property>
+       <property name="frameShadow"><enum>QFrame::Raised</enum></property>
+
+       <layout class="QVBoxLayout" name="platformPieCardLayout">
+        <property name="leftMargin"><number>18</number></property>
+        <property name="topMargin"><number>16</number></property>
+        <property name="rightMargin"><number>18</number></property>
+        <property name="bottomMargin"><number>16</number></property>
+        <property name="spacing"><number>10</number></property>
+
+        <item>
+         <widget class="QLabel" name="platformPieTitleLabel">
+          <property name="text"><string>Platform Post Share</string></property>
+         </widget>
+        </item>
+
+        <item>
+         <widget class="QWidget" name="platformPieChartContainer">
+          <layout class="QVBoxLayout" name="platformPieChartContainerLayout">
+           <property name="leftMargin"><number>0</number></property>
+           <property name="topMargin"><number>0</number></property>
+           <property name="rightMargin"><number>0</number></property>
+           <property name="bottomMargin"><number>0</number></property>
+          </layout>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </item>
+
+     <item row="0" column="1">
+      <widget class="QFrame" name="platformBarCard">
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>260</height>
+        </size>
+       </property>
+       <property name="frameShape"><enum>QFrame::StyledPanel</enum></property>
+       <property name="frameShadow"><enum>QFrame::Raised</enum></property>
+
+       <layout class="QVBoxLayout" name="platformBarCardLayout">
+        <property name="leftMargin"><number>18</number></property>
+        <property name="topMargin"><number>16</number></property>
+        <property name="rightMargin"><number>18</number></property>
+        <property name="bottomMargin"><number>16</number></property>
+        <property name="spacing"><number>10</number></property>
+
+        <item>
+         <widget class="QLabel" name="platformBarTitleLabel">
+          <property name="text"><string>Platform Interactions</string></property>
+         </widget>
+        </item>
+
+        <item>
+         <widget class="QWidget" name="platformBarChartContainer">
+          <layout class="QVBoxLayout" name="platformBarChartContainerLayout">
+           <property name="leftMargin"><number>0</number></property>
+           <property name="topMargin"><number>0</number></property>
+           <property name="rightMargin"><number>0</number></property>
+           <property name="bottomMargin"><number>0</number></property>
+          </layout>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </item>
+    </layout>
+   </item>
+
+   <item>
+    <widget class="QFrame" name="dailyTrendCard">
      <property name="minimumSize">
       <size>
        <width>0</width>
-       <height>110</height>
+       <height>260</height>
       </size>
      </property>
-     <property name="frameShape">
-      <enum>QFrame::StyledPanel</enum>
-     </property>
-     <property name="frameShadow">
-      <enum>QFrame::Raised</enum>
-     </property>
+     <property name="frameShape"><enum>QFrame::StyledPanel</enum></property>
+     <property name="frameShadow"><enum>QFrame::Raised</enum></property>
 
-     <layout class="QVBoxLayout" name="topPostCardLayout">
-      <property name="leftMargin">
-       <number>20</number>
-      </property>
-      <property name="topMargin">
-       <number>18</number>
-      </property>
-      <property name="rightMargin">
-       <number>20</number>
-      </property>
-      <property name="bottomMargin">
-       <number>18</number>
-      </property>
-      <property name="spacing">
-       <number>10</number>
-      </property>
+     <layout class="QVBoxLayout" name="dailyTrendCardLayout">
+      <property name="leftMargin"><number>18</number></property>
+      <property name="topMargin"><number>16</number></property>
+      <property name="rightMargin"><number>18</number></property>
+      <property name="bottomMargin"><number>16</number></property>
+      <property name="spacing"><number>10</number></property>
 
       <item>
-       <widget class="QLabel" name="topPostPanelTitleLabel">
-        <property name="text">
-         <string>Top Post</string>
-        </property>
+       <widget class="QLabel" name="dailyTrendTitleLabel">
+        <property name="text"><string>Recent 14-Day Interaction Trend</string></property>
        </widget>
       </item>
 
       <item>
-       <widget class="QLabel" name="topPostTitleLabel">
-        <property name="text">
-         <string>No post data yet.</string>
-        </property>
-        <property name="wordWrap">
-         <bool>true</bool>
-        </property>
+       <widget class="QWidget" name="dailyTrendChartContainer">
+        <layout class="QVBoxLayout" name="dailyTrendChartContainerLayout">
+         <property name="leftMargin"><number>0</number></property>
+         <property name="topMargin"><number>0</number></property>
+         <property name="rightMargin"><number>0</number></property>
+         <property name="bottomMargin"><number>0</number></property>
+        </layout>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+
+   <item>
+    <widget class="QFrame" name="topPostsCard">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>210</height>
+      </size>
+     </property>
+     <property name="frameShape"><enum>QFrame::StyledPanel</enum></property>
+     <property name="frameShadow"><enum>QFrame::Raised</enum></property>
+
+     <layout class="QVBoxLayout" name="topPostsCardLayout">
+      <property name="leftMargin"><number>18</number></property>
+      <property name="topMargin"><number>16</number></property>
+      <property name="rightMargin"><number>18</number></property>
+      <property name="bottomMargin"><number>16</number></property>
+      <property name="spacing"><number>10</number></property>
+
+      <item>
+       <widget class="QLabel" name="topPostsTitleLabel">
+        <property name="text"><string>Top 5 Popular Posts</string></property>
        </widget>
       </item>
 
       <item>
-       <widget class="QLabel" name="topPostDetailLabel">
-        <property name="text">
-         <string>Add post data in Post Data page first.</string>
-        </property>
-        <property name="wordWrap">
+       <widget class="QTableWidget" name="topPostsTable">
+        <property name="alternatingRowColors">
          <bool>true</bool>
         </property>
        </widget>
@@ -431,49 +414,16 @@
    </item>
 
    <item>
-    <widget class="QFrame" name="recentPostsCard">
-     <property name="frameShape">
-      <enum>QFrame::StyledPanel</enum>
+    <widget class="QLabel" name="messageLabel">
+     <property name="text">
+      <string/>
      </property>
-     <property name="frameShadow">
-      <enum>QFrame::Raised</enum>
+     <property name="wordWrap">
+      <bool>true</bool>
      </property>
-
-     <layout class="QVBoxLayout" name="recentPostsCardLayout">
-      <property name="leftMargin">
-       <number>20</number>
-      </property>
-      <property name="topMargin">
-       <number>18</number>
-      </property>
-      <property name="rightMargin">
-       <number>20</number>
-      </property>
-      <property name="bottomMargin">
-       <number>18</number>
-      </property>
-      <property name="spacing">
-       <number>12</number>
-      </property>
-
-      <item>
-       <widget class="QLabel" name="recentPostsPanelTitleLabel">
-        <property name="text">
-         <string>Recent Posts</string>
-        </property>
-       </widget>
-      </item>
-
-      <item>
-       <widget class="QTableWidget" name="recentPostsTable">
-        <property name="alternatingRowColors">
-         <bool>true</bool>
-        </property>
-       </widget>
-      </item>
-     </layout>
     </widget>
    </item>
+
   </layout>
  </widget>
  <resources/>

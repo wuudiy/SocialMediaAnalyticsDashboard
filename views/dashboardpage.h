@@ -1,13 +1,15 @@
 #ifndef DASHBOARDPAGE_H
 #define DASHBOARDPAGE_H
 
-#include "../models/post.h"
 #include "../models/user.h"
-#include "../services/analyticsservice.h"
+#include "../services/dashboardvisualizationservice.h"
 
 #include <QList>
 #include <QString>
 #include <QWidget>
+
+class QChart;
+class QChartView;
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -16,31 +18,19 @@ class DashboardPage;
 QT_END_NAMESPACE
 
 /*
- * 登录后的 Dashboard 首页。
+ * Dashboard 首页可视化模块。
  *
- * 当前重构后的分工：
+ * 当前页面职责：
+ * 1. 显示核心统计卡片；
+ * 2. 显示平台帖子占比饼图；
+ * 3. 显示平台互动量柱状图；
+ * 4. 显示最近 14 天互动趋势折线图；
+ * 5. 显示 Top 5 热门帖子排行。
  *
- * 1. forms/dashboardpage.ui
- *    负责固定界面结构：
- *    - 欢迎标题；
- *    - 副标题；
- *    - 4 个统计卡片；
- *    - Top Post 卡片；
- *    - Recent Posts 表格卡片。
- *
- * 2. views/dashboardpage.cpp
- *    负责运行时逻辑：
- *    - 初始化控件 objectName；
- *    - 初始化表格列；
- *    - 从 AnalyticsService 读取统计数据；
- *    - 刷新统计卡片；
- *    - 刷新最近帖子表格。
- *
- * 3. services/AnalyticsService
- *    负责真正的数据统计和数据库查询。
- *
- * 这样 DashboardPage.cpp 不再手写大量 new QLabel / new QFrame /
- * new QGridLayout / addWidget 代码，后续可以直接用 Qt Designer 调整首页界面。
+ * 注意：
+ * - 本页面不直接写复杂 SQL；
+ * - 数据查询交给 DashboardVisualizationService；
+ * - 图表绘制交给 Qt Charts；
  */
 class DashboardPage : public QWidget
 {
@@ -50,33 +40,49 @@ public:
     explicit DashboardPage(QWidget *parent = nullptr);
     ~DashboardPage();
 
-    // MainWindow 登录成功后传入当前用户，用于刷新欢迎文案。
+    // MainWindow 登录成功后调用，用于显示欢迎语。
     void setCurrentUser(const User& user);
 
 public slots:
-    // 数据变化或切回首页时调用，保证首页统计是最新数据。
+    // 主窗口切回 Dashboard 或数据变化后调用。
     void refreshDashboard();
 
-private:
-    // 初始化 .ui 中控件的运行时属性，例如 objectName、表格样式、文字换行。
-    void prepareUiObjects();
+private slots:
+    void onRefreshClicked();
 
-    // 应用 Dashboard 页面统一样式。
+private:
+    void prepareUiObjects();
+    void connectSignals();
     void applyStyleSheet();
 
-    // 初始化最近帖子表格。
-    void setupRecentPostsTable();
+    void createChartViews();
+    void setupTopPostsTable();
 
-    // 把最近帖子数据填入表格。
-    void fillRecentPostsTable(const QList<Post>& posts);
+    void refreshSummaryCards();
+    void refreshPlatformPieChart();
+    void refreshPlatformBarChart();
+    void refreshDailyTrendChart();
+    void refreshTopPostsTable();
 
-    // 百分比格式化工具，例如 0.1234 -> 12.34%。
+    void replaceChart(QChartView *chartView,
+                      QChart *newChart);
+
+    QString formatNumber(qint64 value) const;
     QString formatPercent(double value) const;
+    QString shortText(const QString& text,
+                      int maxLength) const;
+
+    void setMessage(const QString& message,
+                    bool error = false);
 
 private:
     Ui::DashboardPage *ui;
 
-    AnalyticsService analyticsService;
+    DashboardVisualizationService visualizationService;
+
+    QChartView *platformPieChartView;
+    QChartView *platformBarChartView;
+    QChartView *dailyTrendChartView;
 };
 
 #endif // DASHBOARDPAGE_H
