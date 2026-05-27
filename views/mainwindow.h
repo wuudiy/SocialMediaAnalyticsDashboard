@@ -13,8 +13,10 @@ QT_END_NAMESPACE
 
 class AnalyticsPage;
 class DashboardPage;
+class ExportPage;
 class LogPage;
 class PostManagementPage;
+class SettingsPage;
 class UserManagementPage;
 
 class QPushButton;
@@ -52,6 +54,7 @@ private slots:
     void showAnalyticsPage();
     void showUserManagementPage();
     void showLogPage();
+    void showExportPage();
     void showSettingsPage();
     void exitApplication();
 
@@ -80,9 +83,10 @@ private:
     DashboardPage *dashboardPage;
     PostManagementPage *postManagementPage;
     AnalyticsPage *analyticsPage;
+    ExportPage *exportPage;
     UserManagementPage *userManagementPage;
     LogPage *logPage;
-    QWidget *settingsPage;
+    SettingsPage *settingsPage;
 };
 
 #endif // MAINWINDOW_H

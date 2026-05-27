@@ -451,3 +451,4 @@ QString AppStyle::messageLabelStyle(bool error)
                ? QStringLiteral("color: #DC2626; font-size: 13px;")
                : QStringLiteral("color: #374151; font-size: 13px;");
 }
+

@@ -5,8 +5,10 @@
 
 #include "analyticspage.h"
 #include "dashboardpage.h"
+#include "exportpage.h"
 #include "logpage.h"
 #include "postmanagementpage.h"
+#include "settingspage.h"
 #include "usermanagementpage.h"
 
 #include <QApplication>
@@ -25,6 +27,7 @@ MainWindow::MainWindow(QWidget *parent)
     dashboardPage(nullptr),
     postManagementPage(nullptr),
     analyticsPage(nullptr),
+    exportPage(nullptr),
     userManagementPage(nullptr),
     logPage(nullptr),
     settingsPage(nullptr)
@@ -64,6 +67,7 @@ void MainWindow::prepareUiObjects()
         ui->dashboardButton,
         ui->postManagementButton,
         ui->analyticsButton,
+        ui->exportButton,
         ui->userManagementButton,
         ui->operationLogsButton,
         ui->settingsButton
@@ -99,18 +103,17 @@ void MainWindow::setupPages()
     postManagementPage = new PostManagementPage(ui->pageStack);
 
     analyticsPage = new AnalyticsPage(ui->pageStack);
+    exportPage = new ExportPage(ui->pageStack);
 
     userManagementPage = new UserManagementPage(ui->pageStack);
     logPage = new LogPage(ui->pageStack);
 
-    settingsPage = createPlaceholderPage(
-        QStringLiteral("Settings"),
-        QStringLiteral("System preferences, database settings and profile options will be placed here.")
-        );
+    settingsPage = new SettingsPage(ui->pageStack);
 
     ui->pageStack->addWidget(dashboardPage);
     ui->pageStack->addWidget(postManagementPage);
     ui->pageStack->addWidget(analyticsPage);
+    ui->pageStack->addWidget(exportPage);
     ui->pageStack->addWidget(userManagementPage);
     ui->pageStack->addWidget(logPage);
     ui->pageStack->addWidget(settingsPage);
@@ -132,6 +135,9 @@ void MainWindow::connectSignals()
 
     connect(ui->analyticsButton, &QPushButton::clicked,
             this, &MainWindow::showAnalyticsPage);
+
+    connect(ui->exportButton, &QPushButton::clicked,
+            this, &MainWindow::showExportPage);
 
     connect(ui->userManagementButton, &QPushButton::clicked,
             this, &MainWindow::showUserManagementPage);
@@ -175,6 +181,7 @@ void MainWindow::setCurrentUser(const User& user)
 
     dashboardPage->setCurrentUser(currentUser);
     postManagementPage->setCurrentUser(currentUser);
+    exportPage->setCurrentUser(currentUser);
     userManagementPage->setCurrentUser(currentUser);
 
     updateRoleAccess();
@@ -264,6 +271,21 @@ void MainWindow::showAnalyticsPage()
         analyticsPage,
         QStringLiteral("Analytics"),
         ui->analyticsButton
+        );
+}
+
+/*
+ * 切换到报表导出页面。
+ *
+ * 导出功能对所有用户开放，
+ * 允许用户将统计数据导出为 CSV 或 TXT 格式。
+ */
+void MainWindow::showExportPage()
+{
+    navigateTo(
+        exportPage,
+        QStringLiteral("Export Reports"),
+        ui->exportButton
         );
 }
 
