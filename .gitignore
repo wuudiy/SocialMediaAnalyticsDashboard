@@ -89,3 +89,4 @@ CMakeLists.txt.user*
 
 # Build output
 build/
+.qtcreator/*.user
