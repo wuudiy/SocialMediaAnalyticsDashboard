@@ -5,12 +5,10 @@ project(SocialMediaAnalyticsDashboard VERSION 1.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Qt 自动处理 ui / moc / qrc。
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
-# .ui 文件放在 forms 目录下，AUTOUIC 需要知道搜索路径。
 set(CMAKE_AUTOUIC_SEARCH_PATHS
     ${CMAKE_CURRENT_SOURCE_DIR}/forms
 )
@@ -18,7 +16,6 @@ set(CMAKE_AUTOUIC_SEARCH_PATHS
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets Sql Charts)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Sql Charts)
 
-# 项目源码统一维护在这里，后续新增文件只改这一块。
 set(PROJECT_SOURCES
     main.cpp
 
@@ -44,6 +41,8 @@ set(PROJECT_SOURCES
     services/postrepository.cpp
     services/analyticsservice.h
     services/analyticsservice.cpp
+    services/dashboardvisualizationservice.h
+    services/dashboardvisualizationservice.cpp
     services/logservice.h
     services/logservice.cpp
 
@@ -81,7 +80,6 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
     qt_add_executable(${PROJECT_NAME}
         MANUAL_FINALIZATION
         ${PROJECT_SOURCES}
-        services/dashboardvisualizationservice.h services/dashboardvisualizationservice.cpp
     )
 else()
     add_executable(${PROJECT_NAME}

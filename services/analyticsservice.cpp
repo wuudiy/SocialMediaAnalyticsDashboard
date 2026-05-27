@@ -5,27 +5,120 @@
 #include <QDebug>
 #include <QSqlError>
 #include <QSqlQuery>
-#include <QVariant>
+#include <QtGlobal>
+
+namespace
+{
+QString normalizedPlatform(const AnalyticsFilter& filter)
+{
+    return filter.platform.trimmed();
+}
+
+bool hasPlatformFilter(const AnalyticsFilter& filter)
+{
+    return !normalizedPlatform(filter).isEmpty();
+}
+
+bool hasStartDateFilter(const AnalyticsFilter& filter)
+{
+    return filter.startDate.isValid();
+}
+
+bool hasEndDateFilter(const AnalyticsFilter& filter)
+{
+    return filter.endDate.isValid();
+}
+
+/*
+ * 统一追加 posts 表筛选条件。
+ *
+ * 必须先 appendPostFilters(sql, filter)，再 query.prepare(sql)。
+ */
+void appendPostFilters(QString& sql, const AnalyticsFilter& filter)
+{
+    sql += QStringLiteral("WHERE 1 = 1 ");
+
+    if (hasPlatformFilter(filter)) {
+        sql += QStringLiteral("AND platform = :platform ");
+    }
+
+    if (hasStartDateFilter(filter)) {
+        sql += QStringLiteral("AND publish_date >= :start_date ");
+    }
+
+    if (hasEndDateFilter(filter)) {
+        sql += QStringLiteral("AND publish_date <= :end_date ");
+    }
+}
+
+/*
+ * 统一绑定筛选参数。
+ */
+void bindPostFilters(QSqlQuery& query, const AnalyticsFilter& filter)
+{
+    if (hasPlatformFilter(filter)) {
+        query.bindValue(QStringLiteral(":platform"), normalizedPlatform(filter));
+    }
+
+    if (hasStartDateFilter(filter)) {
+        query.bindValue(QStringLiteral(":start_date"),
+                        filter.startDate.toString(Qt::ISODate));
+    }
+
+    if (hasEndDateFilter(filter)) {
+        query.bindValue(QStringLiteral(":end_date"),
+                        filter.endDate.toString(Qt::ISODate));
+    }
+}
+
+/*
+ * SELECT 字段顺序必须是：
+ * post_id, platform, account_name, content, publish_date,
+ * likes, comments, shares, views
+ */
+Post buildPostFromQuery(const QSqlQuery& query)
+{
+    Post post;
+
+    post.postId = query.value(0).toInt();
+    post.platform = query.value(1).toString();
+    post.accountName = query.value(2).toString();
+    post.content = query.value(3).toString();
+    post.publishDate = query.value(4).toDate();
+    post.likes = query.value(5).toInt();
+    post.comments = query.value(6).toInt();
+    post.shares = query.value(7).toInt();
+    post.views = query.value(8).toInt();
+
+    return post;
+}
+}
 
 AnalyticsService::AnalyticsService()
 {
 }
 
-DashboardSummary AnalyticsService::loadDashboardSummary()
+DashboardSummary AnalyticsService::loadDashboardSummary(const AnalyticsFilter& filter)
 {
     DashboardSummary summary;
 
-    QSqlQuery query(DatabaseManager::database());
+    QString sql = QStringLiteral(
+        "SELECT "
+        "COUNT(*), "
+        "COALESCE(SUM(likes), 0), "
+        "COALESCE(SUM(comments), 0), "
+        "COALESCE(SUM(shares), 0), "
+        "COALESCE(SUM(views), 0) "
+        "FROM posts "
+        );
 
-    if (!query.exec(
-            "SELECT "
-            "COUNT(*), "
-            "COALESCE(SUM(likes), 0), "
-            "COALESCE(SUM(comments), 0), "
-            "COALESCE(SUM(shares), 0), "
-            "COALESCE(SUM(views), 0) "
-            "FROM posts"
-            )) {
+    appendPostFilters(sql, filter);
+
+    QSqlQuery query(DatabaseManager::database());
+    query.prepare(sql);
+    bindPostFilters(query, filter);
+
+    if (!query.exec()) {
         qDebug() << "Load dashboard summary failed:" << query.lastError().text();
         return summary;
     }
@@ -36,6 +129,7 @@ DashboardSummary AnalyticsService::loadDashboardSummary()
         summary.totalComments = query.value(2).toInt();
         summary.totalShares = query.value(3).toInt();
         summary.totalViews = query.value(4).toInt();
+
         summary.totalInteractions =
             summary.totalLikes + summary.totalComments + summary.totalShares;
 
@@ -52,14 +146,24 @@ DashboardSummary AnalyticsService::loadDashboardSummary()
         }
     }
 
-    QSqlQuery topQuery(DatabaseManager::database());
+    QString topSql = QStringLiteral(
+        "SELECT "
+        "content, platform, (likes + comments + shares) AS interactions "
+        "FROM posts "
+        );
 
-    if (!topQuery.exec(
-            "SELECT content, platform, (likes + comments + shares) AS interactions "
-            "FROM posts "
-            "ORDER BY interactions DESC, views DESC, post_id DESC "
-            "LIMIT 1"
-            )) {
+    appendPostFilters(topSql, filter);
+
+    topSql += QStringLiteral(
+        "ORDER BY interactions DESC, views DESC, post_id DESC "
+        "LIMIT 1"
+        );
+
+    QSqlQuery topQuery(DatabaseManager::database());
+    topQuery.prepare(topSql);
+    bindPostFilters(topQuery, filter);
+
+    if (!topQuery.exec()) {
         qDebug() << "Load top post failed:" << topQuery.lastError().text();
         return summary;
     }
@@ -83,41 +187,56 @@ AnalyticsReport AnalyticsService::generateReport(const AnalyticsFilter& filter)
 {
     AnalyticsReport report;
 
-    report.summary = loadDashboardSummary();
-    report.platformStats = getPlatformStatistics(filter.platform);
-    report.dateTrends = getDateTrends(filter.startDate, filter.endDate);
-    report.topPosts = getTopPosts(10);
+    report.summary = loadDashboardSummary(filter);
+    report.platformStats = getPlatformStatistics(filter);
+    report.dateTrends = getDateTrends(filter);
+    report.topPosts = getTopPosts(10, filter);
 
     return report;
 }
 
+// 兼容 ExportPage 的旧调用方式。
+// ExportPage 只传平台字符串，这里转成统一的 AnalyticsFilter。
 QList<PlatformStatistics> AnalyticsService::getPlatformStatistics(const QString& platform)
+{
+    AnalyticsFilter filter;
+
+    const QString trimmedPlatform = platform.trimmed();
+
+    if (!trimmedPlatform.isEmpty()
+        && trimmedPlatform != QStringLiteral("All Platforms")) {
+        filter.platform = trimmedPlatform;
+    }
+
+    return getPlatformStatistics(filter);
+}
+
+QList<PlatformStatistics> AnalyticsService::getPlatformStatistics(const AnalyticsFilter& filter)
 {
     QList<PlatformStatistics> statsList;
 
     QString sql = QStringLiteral(
         "SELECT "
         "platform, "
-        "COUNT(*) as post_count, "
-        "COALESCE(SUM(likes), 0) as total_likes, "
-        "COALESCE(SUM(comments), 0) as total_comments, "
-        "COALESCE(SUM(shares), 0) as total_shares, "
-        "COALESCE(SUM(views), 0) as total_views "
+        "COUNT(*) AS post_count, "
+        "COALESCE(SUM(likes), 0) AS total_likes, "
+        "COALESCE(SUM(comments), 0) AS total_comments, "
+        "COALESCE(SUM(shares), 0) AS total_shares, "
+        "COALESCE(SUM(views), 0) AS total_views, "
+        "COALESCE(SUM(likes + comments + shares), 0) AS total_interactions "
         "FROM posts "
-    );
+        );
+
+    appendPostFilters(sql, filter);
+
+    sql += QStringLiteral(
+        "GROUP BY platform "
+        "ORDER BY post_count DESC, total_interactions DESC, platform ASC"
+        );
 
     QSqlQuery query(DatabaseManager::database());
-
-    if (!platform.isEmpty()) {
-        sql += QStringLiteral("WHERE platform = :platform ");
-        query.prepare(sql);
-        query.bindValue(QStringLiteral(":platform"), platform);
-    } else {
-        sql += QStringLiteral("GROUP BY platform ");
-        query.prepare(sql);
-    }
-
-    sql += QStringLiteral("ORDER BY post_count DESC");
+    query.prepare(sql);
+    bindPostFilters(query, filter);
 
     if (!query.exec()) {
         qDebug() << "Get platform statistics failed:" << query.lastError().text();
@@ -126,13 +245,14 @@ QList<PlatformStatistics> AnalyticsService::getPlatformStatistics(const QString&
 
     while (query.next()) {
         PlatformStatistics stats;
+
         stats.platform = query.value(0).toString();
         stats.postCount = query.value(1).toInt();
         stats.totalLikes = query.value(2).toInt();
         stats.totalComments = query.value(3).toInt();
         stats.totalShares = query.value(4).toInt();
         stats.totalViews = query.value(5).toInt();
-        stats.totalInteractions = stats.totalLikes + stats.totalComments + stats.totalShares;
+        stats.totalInteractions = query.value(6).toInt();
 
         if (stats.totalViews > 0) {
             stats.averageEngagementRate =
@@ -146,34 +266,29 @@ QList<PlatformStatistics> AnalyticsService::getPlatformStatistics(const QString&
     return statsList;
 }
 
-QList<DateTrend> AnalyticsService::getDateTrends(QDate startDate, QDate endDate)
+QList<DateTrend> AnalyticsService::getDateTrends(const AnalyticsFilter& filter)
 {
     QList<DateTrend> trends;
 
     QString sql = QStringLiteral(
         "SELECT "
         "publish_date, "
-        "COUNT(*) as post_count, "
-        "COALESCE(SUM(likes + comments + shares), 0) as total_interactions, "
-        "COALESCE(SUM(views), 0) as total_views "
+        "COUNT(*) AS post_count, "
+        "COALESCE(SUM(likes + comments + shares), 0) AS total_interactions, "
+        "COALESCE(SUM(views), 0) AS total_views "
         "FROM posts "
-        "WHERE 1=1 "
-    );
+        );
+
+    appendPostFilters(sql, filter);
+
+    sql += QStringLiteral(
+        "GROUP BY publish_date "
+        "ORDER BY publish_date ASC"
+        );
 
     QSqlQuery query(DatabaseManager::database());
     query.prepare(sql);
-
-    if (startDate.isValid()) {
-        sql += QStringLiteral("AND publish_date >= :start_date ");
-        query.bindValue(QStringLiteral(":start_date"), startDate);
-    }
-
-    if (endDate.isValid()) {
-        sql += QStringLiteral("AND publish_date <= :end_date ");
-        query.bindValue(QStringLiteral(":end_date"), endDate);
-    }
-
-    sql += QStringLiteral("GROUP BY publish_date ORDER BY publish_date ASC");
+    bindPostFilters(query, filter);
 
     if (!query.exec()) {
         qDebug() << "Get date trends failed:" << query.lastError().text();
@@ -182,6 +297,7 @@ QList<DateTrend> AnalyticsService::getDateTrends(QDate startDate, QDate endDate)
 
     while (query.next()) {
         DateTrend trend;
+
         trend.date = query.value(0).toDate();
         trend.postCount = query.value(1).toInt();
         trend.totalInteractions = query.value(2).toInt();
@@ -199,23 +315,27 @@ QList<DateTrend> AnalyticsService::getDateTrends(QDate startDate, QDate endDate)
     return trends;
 }
 
-QList<Post> AnalyticsService::getTopPosts(int limit)
+QList<Post> AnalyticsService::getTopPosts(int limit, const AnalyticsFilter& filter)
 {
     QList<Post> posts;
 
-    QSqlQuery query(DatabaseManager::database());
+    QString sql = QStringLiteral(
+        "SELECT "
+        "post_id, platform, account_name, content, publish_date, "
+        "likes, comments, shares, views "
+        "FROM posts "
+        );
 
-    query.prepare(
-        QStringLiteral(
-            "SELECT "
-            "post_id, platform, account_name, content, publish_date, "
-            "likes, comments, shares, views "
-            "FROM posts "
-            "ORDER BY (likes + comments + shares) DESC, views DESC "
-            "LIMIT :limit"
-        )
-    );
-    query.bindValue(QStringLiteral(":limit"), limit);
+    appendPostFilters(sql, filter);
+
+    sql += QStringLiteral(
+               "ORDER BY (likes + comments + shares) DESC, views DESC, post_id DESC "
+               "LIMIT %1"
+               ).arg(qMax(1, limit));
+
+    QSqlQuery query(DatabaseManager::database());
+    query.prepare(sql);
+    bindPostFilters(query, filter);
 
     if (!query.exec()) {
         qDebug() << "Get top posts failed:" << query.lastError().text();
@@ -223,17 +343,40 @@ QList<Post> AnalyticsService::getTopPosts(int limit)
     }
 
     while (query.next()) {
-        Post post;
-        post.postId = query.value(0).toInt();
-        post.platform = query.value(1).toString();
-        post.accountName = query.value(2).toString();
-        post.content = query.value(3).toString();
-        post.publishDate = query.value(4).toDate();
-        post.likes = query.value(5).toInt();
-        post.comments = query.value(6).toInt();
-        post.shares = query.value(7).toInt();
-        post.views = query.value(8).toInt();
-        posts.append(post);
+        posts.append(buildPostFromQuery(query));
+    }
+
+    return posts;
+}
+
+QList<Post> AnalyticsService::getPostsForExport(const AnalyticsFilter& filter)
+{
+    QList<Post> posts;
+
+    QString sql = QStringLiteral(
+        "SELECT "
+        "post_id, platform, account_name, content, publish_date, "
+        "likes, comments, shares, views "
+        "FROM posts "
+        );
+
+    appendPostFilters(sql, filter);
+
+    sql += QStringLiteral(
+        "ORDER BY publish_date DESC, post_id DESC"
+        );
+
+    QSqlQuery query(DatabaseManager::database());
+    query.prepare(sql);
+    bindPostFilters(query, filter);
+
+    if (!query.exec()) {
+        qDebug() << "Get posts for export failed:" << query.lastError().text();
+        return posts;
+    }
+
+    while (query.next()) {
+        posts.append(buildPostFromQuery(query));
     }
 
     return posts;

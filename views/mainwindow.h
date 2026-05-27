@@ -24,19 +24,7 @@ class QWidget;
 
 /*
  * 登录后的主界面。
- *
- * 现在采用“ui + cpp + AppStyle”分工：
- *
- * - forms/mainwindow.ui：
- *   负责主窗口固定布局，例如左侧导航、顶部栏、QStackedWidget。
- *
- * - views/mainwindow.cpp：
- *   负责页面创建、页面切换、权限控制、信号槽连接。
- *
- * - services/AppStyle：
- *   负责统一 QSS 样式。
- *
- * 这样可以减少 MainWindow.cpp 中大量 new 控件和 addWidget 代码。
+ * 负责页面创建、页面切换、权限控制和导航栏状态刷新。
  */
 class MainWindow : public QMainWindow
 {
@@ -52,9 +40,9 @@ private slots:
     void showDashboardPage();
     void showPostManagementPage();
     void showAnalyticsPage();
+    void showExportPage();
     void showUserManagementPage();
     void showLogPage();
-    void showExportPage();
     void showSettingsPage();
     void exitApplication();
 
@@ -66,6 +54,12 @@ private:
 
     QWidget* createPlaceholderPage(const QString& title,
                                    const QString& description);
+
+    // 给页面套滚动区域，避免默认窗口下内容被压缩错版。
+    QWidget* createScrollablePage(QWidget *page);
+
+    // pageStack 中保存的是滚动容器，这里负责根据真实页面找到容器。
+    QWidget* pageContainer(QWidget *page) const;
 
     void navigateTo(QWidget *page,
                     const QString& title,
@@ -87,6 +81,14 @@ private:
     UserManagementPage *userManagementPage;
     LogPage *logPage;
     SettingsPage *settingsPage;
+
+    QWidget *dashboardContainer;
+    QWidget *postManagementContainer;
+    QWidget *analyticsContainer;
+    QWidget *exportContainer;
+    QWidget *userManagementContainer;
+    QWidget *logContainer;
+    QWidget *settingsContainer;
 };
 
 #endif // MAINWINDOW_H

@@ -17,6 +17,7 @@
 #include <QList>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QStatusBar>
 #include <QStyle>
 #include <QVBoxLayout>
@@ -30,12 +31,15 @@ MainWindow::MainWindow(QWidget *parent)
     exportPage(nullptr),
     userManagementPage(nullptr),
     logPage(nullptr),
-    settingsPage(nullptr)
+    settingsPage(nullptr),
+    dashboardContainer(nullptr),
+    postManagementContainer(nullptr),
+    analyticsContainer(nullptr),
+    exportContainer(nullptr),
+    userManagementContainer(nullptr),
+    logContainer(nullptr),
+    settingsContainer(nullptr)
 {
-    /*
-     * setupUi() 会读取 forms/mainwindow.ui，
-     * 并创建左侧导航栏、顶部栏、pageStack 等固定界面结构。
-     */
     ui->setupUi(this);
 
     prepareUiObjects();
@@ -53,13 +57,6 @@ MainWindow::~MainWindow()
 
 /*
  * 初始化 ui 中已有控件的运行时属性。
- *
- * 注意：
- * Qt Designer 里的对象名必须保持唯一，例如 dashboardButton、postManagementButton。
- * 但是 AppStyle 里导航按钮样式使用的是 navButton / activeNavButton。
- *
- * 所以这里在 setupUi() 之后，统一把这些按钮的 objectName 改成 navButton。
- * 这样既能保留 ui->dashboardButton 这种访问方式，又能复用统一 QSS。
  */
 void MainWindow::prepareUiObjects()
 {
@@ -91,39 +88,37 @@ void MainWindow::prepareUiObjects()
 }
 
 /*
- * 创建真实页面对象，并加入 ui 文件中的 pageStack。
- *
- * ui 文件只负责提供 QStackedWidget 容器，
- * 具体页面仍然由 C++ 创建，方便继续使用原来的 DashboardPage、
- * PostManagementPage、UserManagementPage 和 LogPage 逻辑。
+ * 创建页面对象，并统一放入滚动容器。
  */
 void MainWindow::setupPages()
 {
-    dashboardPage = new DashboardPage(ui->pageStack);
-    postManagementPage = new PostManagementPage(ui->pageStack);
+    dashboardPage = new DashboardPage();
+    postManagementPage = new PostManagementPage();
+    analyticsPage = new AnalyticsPage();
+    exportPage = new ExportPage();
+    userManagementPage = new UserManagementPage();
+    logPage = new LogPage();
+    settingsPage = new SettingsPage();
 
-    analyticsPage = new AnalyticsPage(ui->pageStack);
-    exportPage = new ExportPage(ui->pageStack);
+    dashboardContainer = createScrollablePage(dashboardPage);
+    postManagementContainer = createScrollablePage(postManagementPage);
+    analyticsContainer = createScrollablePage(analyticsPage);
+    exportContainer = createScrollablePage(exportPage);
+    userManagementContainer = createScrollablePage(userManagementPage);
+    logContainer = createScrollablePage(logPage);
+    settingsContainer = createScrollablePage(settingsPage);
 
-    userManagementPage = new UserManagementPage(ui->pageStack);
-    logPage = new LogPage(ui->pageStack);
-
-    settingsPage = new SettingsPage(ui->pageStack);
-
-    ui->pageStack->addWidget(dashboardPage);
-    ui->pageStack->addWidget(postManagementPage);
-    ui->pageStack->addWidget(analyticsPage);
-    ui->pageStack->addWidget(exportPage);
-    ui->pageStack->addWidget(userManagementPage);
-    ui->pageStack->addWidget(logPage);
-    ui->pageStack->addWidget(settingsPage);
+    ui->pageStack->addWidget(dashboardContainer);
+    ui->pageStack->addWidget(postManagementContainer);
+    ui->pageStack->addWidget(analyticsContainer);
+    ui->pageStack->addWidget(exportContainer);
+    ui->pageStack->addWidget(userManagementContainer);
+    ui->pageStack->addWidget(logContainer);
+    ui->pageStack->addWidget(settingsContainer);
 }
 
 /*
  * 集中连接主窗口按钮的信号槽。
- *
- * 这样 ui 文件只负责“有哪些按钮”，
- * cpp 文件负责“按钮点击后做什么”。
  */
 void MainWindow::connectSignals()
 {
@@ -154,8 +149,6 @@ void MainWindow::connectSignals()
 
 /*
  * 主窗口样式统一交给 AppStyle。
- *
- * MainWindow 只保留页面逻辑，不再保存大段 QSS 字符串。
  */
 void MainWindow::applyStyleSheet()
 {
@@ -163,7 +156,7 @@ void MainWindow::applyStyleSheet()
 }
 
 /*
- * 设置当前登录用户，并把用户信息同步给主界面和子页面。
+ * 设置当前登录用户，并同步给需要用户信息的子页面。
  */
 void MainWindow::setCurrentUser(const User& user)
 {
@@ -195,9 +188,7 @@ void MainWindow::setCurrentUser(const User& user)
 
 /*
  * 创建占位页。
- *
- * 当前 Analytics 和 Settings 还没有做成真实页面，
- * 所以先保留占位卡片，后续可以继续替换为独立 Page 类。
+ * 当前保留此函数，后续新增页面时仍可复用。
  */
 QWidget* MainWindow::createPlaceholderPage(const QString& title,
                                            const QString& description)
@@ -228,6 +219,59 @@ QWidget* MainWindow::createPlaceholderPage(const QString& title,
 
     layout->addWidget(card);
     layout->addStretch();
+
+    return page;
+}
+
+/*
+ * 给页面套一层 QScrollArea。
+ * 内容超过默认窗口高度时，使用滚动条显示，避免控件互相挤压。
+ */
+QWidget* MainWindow::createScrollablePage(QWidget *page)
+{
+    auto *scrollArea = new QScrollArea(ui->pageStack);
+
+    scrollArea->setWidget(page);
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+
+    return scrollArea;
+}
+
+/*
+ * pageStack 里保存的是滚动容器，不是原始页面。
+ */
+QWidget* MainWindow::pageContainer(QWidget *page) const
+{
+    if (page == dashboardPage) {
+        return dashboardContainer;
+    }
+
+    if (page == postManagementPage) {
+        return postManagementContainer;
+    }
+
+    if (page == analyticsPage) {
+        return analyticsContainer;
+    }
+
+    if (page == exportPage) {
+        return exportContainer;
+    }
+
+    if (page == userManagementPage) {
+        return userManagementContainer;
+    }
+
+    if (page == logPage) {
+        return logContainer;
+    }
+
+    if (page == settingsPage) {
+        return settingsContainer;
+    }
 
     return page;
 }
@@ -276,9 +320,6 @@ void MainWindow::showAnalyticsPage()
 
 /*
  * 切换到报表导出页面。
- *
- * 导出功能对所有用户开放，
- * 允许用户将统计数据导出为 CSV 或 TXT 格式。
  */
 void MainWindow::showExportPage()
 {
@@ -291,9 +332,6 @@ void MainWindow::showExportPage()
 
 /*
  * 切换到用户管理页面。
- *
- * 用户管理属于管理员功能，
- * 所以进入页面前先做权限检查。
  */
 void MainWindow::showUserManagementPage()
 {
@@ -316,8 +354,6 @@ void MainWindow::showUserManagementPage()
 
 /*
  * 切换到系统日志页面。
- *
- * 日志页面同样只允许管理员查看。
  */
 void MainWindow::showLogPage()
 {
@@ -354,11 +390,6 @@ void MainWindow::showSettingsPage()
 
 /*
  * 统一处理页面跳转。
- *
- * 这里集中完成三件事：
- * 1. 切换 pageStack 当前页面；
- * 2. 修改顶部标题；
- * 3. 修改左侧导航按钮高亮状态。
  */
 void MainWindow::navigateTo(QWidget *page,
                             const QString& title,
@@ -368,13 +399,19 @@ void MainWindow::navigateTo(QWidget *page,
         return;
     }
 
-    ui->pageStack->setCurrentWidget(page);
+    QWidget *container = pageContainer(page);
+
+    if (!container) {
+        return;
+    }
+
+    ui->pageStack->setCurrentWidget(container);
     ui->pageTitleLabel->setText(title);
     setActiveNavButton(activeButton);
 }
 
 /*
- * 退出程序前二次确认，避免用户误点。
+ * 退出程序前二次确认，避免误点。
  */
 void MainWindow::exitApplication()
 {
@@ -391,14 +428,6 @@ void MainWindow::exitApplication()
 
 /*
  * 刷新左侧导航高亮状态。
- *
- * 说明：
- * 这里通过切换 objectName 来触发不同 QSS：
- * - navButton：普通状态
- * - activeNavButton：当前选中状态
- *
- * 修改 objectName 后需要 unpolish / polish，
- * 否则 Qt 可能不会立刻重新应用样式。
  */
 void MainWindow::setActiveNavButton(QPushButton *activeButton)
 {
@@ -406,6 +435,7 @@ void MainWindow::setActiveNavButton(QPushButton *activeButton)
         ui->dashboardButton,
         ui->postManagementButton,
         ui->analyticsButton,
+        ui->exportButton,
         ui->userManagementButton,
         ui->operationLogsButton,
         ui->settingsButton
@@ -431,11 +461,7 @@ void MainWindow::setActiveNavButton(QPushButton *activeButton)
 }
 
 /*
- * 根据当前用户角色刷新主界面入口。
- *
- * 普通用户不能看到：
- * - User Management
- * - Operation Logs
+ * 根据当前用户角色刷新管理员入口。
  */
 void MainWindow::updateRoleAccess()
 {
@@ -444,18 +470,15 @@ void MainWindow::updateRoleAccess()
     ui->userManagementButton->setVisible(canUseAdminPages);
     ui->operationLogsButton->setVisible(canUseAdminPages);
 
-    /*
-     * 防止普通用户因为代码跳转或角色变化停留在管理员页面。
-     */
     if (!canUseAdminPages
-        && (ui->pageStack->currentWidget() == userManagementPage
-            || ui->pageStack->currentWidget() == logPage)) {
+        && (ui->pageStack->currentWidget() == userManagementContainer
+            || ui->pageStack->currentWidget() == logContainer)) {
         showDashboardPage();
     }
 }
 
 /*
- * 管理员判断统一收口，避免到处直接比较 role 字符串。
+ * 管理员判断统一收口。
  */
 bool MainWindow::isAdminUser() const
 {

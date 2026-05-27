@@ -5,14 +5,13 @@
 
 #include <QDate>
 #include <QList>
-#include <QMap>
 #include <QString>
 
 /*
- * Dashboard 首页统计结果。
+ * Dashboard / Analytics 总体统计结果。
  *
- * 用一个简单结构体集中保存统计值。
- * 页面只负责显示，不需要知道每个指标怎么计算。
+ * totalInteractions = likes + comments + shares
+ * averageEngagementRate = totalInteractions / totalViews
  */
 struct DashboardSummary
 {
@@ -31,7 +30,7 @@ struct DashboardSummary
 };
 
 /*
- * 平台统计数据。
+ * 平台维度统计。
  */
 struct PlatformStatistics
 {
@@ -46,7 +45,7 @@ struct PlatformStatistics
 };
 
 /*
- * 日期趋势数据。
+ * 日期趋势统计。
  */
 struct DateTrend
 {
@@ -58,7 +57,11 @@ struct DateTrend
 };
 
 /*
- * 筛选条件。
+ * Analytics 页面统一筛选条件。
+ *
+ * platform 为空：全部平台。
+ * startDate 无效：不限制开始日期。
+ * endDate 无效：不限制结束日期。
  */
 struct AnalyticsFilter
 {
@@ -68,7 +71,7 @@ struct AnalyticsFilter
 };
 
 /*
- * 完整的分析报告。
+ * Analytics 页面一次刷新所需的完整数据。
  */
 struct AnalyticsReport
 {
@@ -79,38 +82,34 @@ struct AnalyticsReport
 };
 
 /*
- * 数据统计服务。
+ * 数据分析服务。
  *
- * 负责：
- * - 汇总帖子数量；
- * - 计算互动量和互动率；
- * - 查询热门帖子；
- * - 按平台统计数据；
- * - 按日期统计趋势；
- * - 支持筛选条件。
+ * 页面层只负责显示和交互；
+ * SQL 查询、筛选、统计、排序都放在这里。
  */
 class AnalyticsService
 {
 public:
     AnalyticsService();
 
-    // 获取首页需要展示的总体统计数据。
-    DashboardSummary loadDashboardSummary();
+    DashboardSummary loadDashboardSummary(const AnalyticsFilter& filter = AnalyticsFilter());
 
-    // 获取最近帖子列表。
     QList<Post> loadRecentPosts(int limit = 8);
 
-    // 获取完整的分析报告。
     AnalyticsReport generateReport(const AnalyticsFilter& filter = AnalyticsFilter());
 
-    // 按平台统计数据。
-    QList<PlatformStatistics> getPlatformStatistics(const QString& platform = QString());
+    // 兼容 ExportPage：只按平台筛选。
+    QList<PlatformStatistics> getPlatformStatistics(const QString& platform);
 
-    // 按日期统计趋势。
-    QList<DateTrend> getDateTrends(QDate startDate = QDate(), QDate endDate = QDate());
+    // Analytics 页面使用：按平台 + 日期范围筛选。
+    QList<PlatformStatistics> getPlatformStatistics(const AnalyticsFilter& filter = AnalyticsFilter());
 
-    // 获取热门帖子列表。
-    QList<Post> getTopPosts(int limit = 10);
+    QList<DateTrend> getDateTrends(const AnalyticsFilter& filter = AnalyticsFilter());
+
+    QList<Post> getTopPosts(int limit = 10, const AnalyticsFilter& filter = AnalyticsFilter());
+
+    // 给后续报表导出模块使用。当前你这边不实现导出，只提供数据。
+    QList<Post> getPostsForExport(const AnalyticsFilter& filter = AnalyticsFilter());
 };
 
 #endif // ANALYTICSSERVICE_H
