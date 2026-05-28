@@ -27,6 +27,16 @@ set(PROJECT_SOURCES
     controllers/usercontroller.cpp
     controllers/exportcontroller.h
     controllers/exportcontroller.cpp
+    controllers/analyticscontroller.h
+    controllers/analyticscontroller.cpp
+    controllers/dashboardcontroller.h
+    controllers/dashboardcontroller.cpp
+    controllers/logcontroller.h
+    controllers/logcontroller.cpp
+    controllers/settingscontroller.h
+    controllers/settingscontroller.cpp
+    controllers/mainwindowcontroller.h
+    controllers/mainwindowcontroller.cpp
 
     models/user.h
     models/user.cpp
@@ -36,11 +46,14 @@ set(PROJECT_SOURCES
     models/analyticsmodels.h
     models/dashboardmodels.h
     models/ExportModels.h
+    models/MainWindowModels.h
 
     repositories/userrepository.h
     repositories/userrepository.cpp
     repositories/postrepository.h
     repositories/postrepository.cpp
+    repositories/logrepository.h
+    repositories/logrepository.cpp
 
     infrastructure/databasemanager.h
     infrastructure/databasemanager.cpp
@@ -70,6 +83,10 @@ set(PROJECT_SOURCES
     services/settingsservice.cpp
     services/exportservice.h
     services/exportservice.cpp
+    services/dashboardservice.h
+    services/dashboardservice.cpp
+    services/authservice.h
+    services/authservice.cpp
 
     views/dashboardpage.h
     views/dashboardpage.cpp

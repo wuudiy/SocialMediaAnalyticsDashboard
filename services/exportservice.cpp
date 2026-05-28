@@ -18,14 +18,16 @@ ExportService::ExportService()
 bool ExportService::validateRequest(const ExportRequest& request,
                                     QString& message) const
 {
-    /*
-     * 日期校验放在 Service 中，
-     * 这样后续不管是按钮导出、定时导出还是命令行导出，都可以复用同一套规则。
-     */
     if (request.filter.startDate.isValid()
         && request.filter.endDate.isValid()
         && request.filter.startDate > request.filter.endDate) {
         message = QStringLiteral("Start date cannot be later than end date.");
+        return false;
+    }
+
+    if (!request.filter.includeAllUsers
+        && request.filter.ownerUserId <= 0) {
+        message = QStringLiteral("Current user is invalid. Please login again.");
         return false;
     }
 
@@ -113,7 +115,11 @@ QString ExportService::generateTxtReport(const ExportRequest& request)
     stream << "Data Range:\n";
     stream << "  Start Date: " << filter.startDate.toString(QStringLiteral("yyyy-MM-dd")) << "\n";
     stream << "  End Date:   " << filter.endDate.toString(QStringLiteral("yyyy-MM-dd")) << "\n";
-    stream << "  Platform:   " << displayPlatform(filter.platform) << "\n\n";
+    stream << "  Platform:   " << displayPlatform(filter.platform) << "\n";
+    stream << "  Scope:      " << (filter.includeAllUsers
+                                       ? QStringLiteral("All Users")
+                                       : QStringLiteral("Current User Only"))
+           << "\n\n";
 
     stream << "========================================\n";
     stream << "Summary Statistics\n";
@@ -135,13 +141,13 @@ QString ExportService::generateTxtReport(const ExportRequest& request)
     for (const PlatformStatistics& stats : platformStats) {
         stream << "\n";
         stream << "Platform: " << stats.platform << "\n";
-        stream << "  Post Count:       " << stats.postCount << "\n";
-        stream << "  Total Likes:      " << stats.totalLikes << "\n";
-        stream << "  Total Comments:   " << stats.totalComments << "\n";
-        stream << "  Total Shares:     " << stats.totalShares << "\n";
-        stream << "  Total Views:      " << stats.totalViews << "\n";
-        stream << "  Total Interaction:" << stats.totalInteractions << "\n";
-        stream << "  Engagement Rate:  "
+        stream << "  Post Count:        " << stats.postCount << "\n";
+        stream << "  Total Likes:       " << stats.totalLikes << "\n";
+        stream << "  Total Comments:    " << stats.totalComments << "\n";
+        stream << "  Total Shares:      " << stats.totalShares << "\n";
+        stream << "  Total Views:       " << stats.totalViews << "\n";
+        stream << "  Total Interaction: " << stats.totalInteractions << "\n";
+        stream << "  Engagement Rate:   "
                << QStringLiteral("%1%").arg(stats.averageEngagementRate * 100.0, 0, 'f', 2)
                << "\n";
     }
@@ -198,7 +204,11 @@ QString ExportService::generateCsvReport(const ExportRequest& request)
     stream << "Data Range\n";
     stream << "Start Date," << csvEscape(filter.startDate.toString(QStringLiteral("yyyy-MM-dd"))) << "\n";
     stream << "End Date," << csvEscape(filter.endDate.toString(QStringLiteral("yyyy-MM-dd"))) << "\n";
-    stream << "Platform," << csvEscape(displayPlatform(filter.platform)) << "\n\n";
+    stream << "Platform," << csvEscape(displayPlatform(filter.platform)) << "\n";
+    stream << "Scope," << csvEscape(filter.includeAllUsers
+                                        ? QStringLiteral("All Users")
+                                        : QStringLiteral("Current User Only"))
+           << "\n\n";
 
     stream << "Summary Statistics\n";
     stream << "Metric,Value\n";

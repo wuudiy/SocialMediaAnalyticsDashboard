@@ -2,20 +2,18 @@
 
 Post::Post()
     : postId(-1),
-    platform(""),
-    accountName(""),
-    content(""),
-    publishDate(QDate::currentDate()),
     likes(0),
     comments(0),
     shares(0),
-    views(0)
+    views(0),
+    createdByUserId(-1)
 {
 }
 
+// postId 由数据库自增生成，-1 统一表示无效帖子。
 bool Post::isValid() const
 {
-    return postId != -1;
+    return postId > 0;
 }
 
 int Post::interactionCount() const

@@ -1,12 +1,8 @@
 #include "dashboardpage.h"
-#include "ui_dashboardpage.h"
+#include "ui_DashboardPage.h"
 
+#include "../controllers/dashboardcontroller.h"
 #include "../styles/appstyle.h"
-#include "../infrastructure/databasemanager.h"
-
-#include <QDebug>
-#include <QSqlError>
-#include <QSqlQuery>
 
 #include <QAbstractItemView>
 #include <QBarCategoryAxis>
@@ -19,7 +15,6 @@
 #include <QFrame>
 #include <QHeaderView>
 #include <QLabel>
-#include <QLayout>
 #include <QLineSeries>
 #include <QList>
 #include <QPainter>
@@ -36,19 +31,11 @@
 DashboardPage::DashboardPage(QWidget *parent)
     : QWidget(parent),
     ui(new Ui::DashboardPage),
+    dashboardController(nullptr),
     platformPieChartView(nullptr),
     platformBarChartView(nullptr),
     dailyTrendChartView(nullptr)
 {
-    /*
-     * setupUi() 读取 forms/dashboardpage.ui。
-     *
-     * .ui 负责固定布局：
-     * - 顶部标题；
-     * - 4 个统计卡片；
-     * - 3 个图表容器；
-     * - Top 5 表格。
-     */
     ui->setupUi(this);
 
     prepareUiObjects();
@@ -57,7 +44,11 @@ DashboardPage::DashboardPage(QWidget *parent)
     connectSignals();
     applyStyleSheet();
 
-    refreshDashboard();
+    /*
+     * Controller 由页面内部创建，保持当前项目 MVC 风格一致。
+     * 当前用户会在 MainWindow::applyCurrentUserState() 中通过 setCurrentUser() 注入。
+     */
+    dashboardController = new DashboardController(this, this);
 }
 
 DashboardPage::~DashboardPage()
@@ -65,12 +56,6 @@ DashboardPage::~DashboardPage()
     delete ui;
 }
 
-/*
- * 设置当前登录用户。
- *
- * 这里只更新欢迎语，不做权限控制。
- * 权限控制仍由 MainWindow 负责。
- */
 void DashboardPage::setCurrentUser(const User& user)
 {
     if (user.isValid() && !user.username.trimmed().isEmpty()) {
@@ -81,14 +66,18 @@ void DashboardPage::setCurrentUser(const User& user)
         ui->welcomeLabel->setText(QStringLiteral("Welcome back"));
     }
 
+    /*
+     * 数据隔离关键点：
+     * Dashboard 的当前用户必须交给 Controller，
+     * 由 Controller -> Service -> Repository/SQL 完成权限过滤。
+     */
+    if (dashboardController) {
+        dashboardController->setCurrentUser(user);
+    }
+
     refreshDashboard();
 }
 
-/*
- * 初始化 .ui 中已有控件的运行时属性。
- *
- * objectName 用于复用 AppStyle 中已有的 QSS。
- */
 void DashboardPage::prepareUiObjects()
 {
     setObjectName(QStringLiteral("dashboardPage"));
@@ -173,17 +162,11 @@ void DashboardPage::prepareUiObjects()
     ui->messageLabel->setObjectName(QStringLiteral("messageLabel"));
     ui->messageLabel->setWordWrap(true);
 
-    /*
-     * 让顶部 4 个统计卡片平均分配宽度。
-     */
     ui->summaryGrid->setColumnStretch(0, 1);
     ui->summaryGrid->setColumnStretch(1, 1);
     ui->summaryGrid->setColumnStretch(2, 1);
     ui->summaryGrid->setColumnStretch(3, 1);
 
-    /*
-     * 让两个并排图表平均分配宽度。
-     */
     ui->chartsGrid->setColumnStretch(0, 1);
     ui->chartsGrid->setColumnStretch(1, 1);
 }
@@ -199,11 +182,6 @@ void DashboardPage::applyStyleSheet()
     setStyleSheet(AppStyle::dashboardPageStyle());
 }
 
-/*
- * 创建 QChartView 并放入 .ui 中预留的容器。
- *
- * QChartView 是 QWidget，因此可以直接 addWidget 到 layout 里。
- */
 void DashboardPage::createChartViews()
 {
     platformPieChartView = new QChartView(this);
@@ -226,9 +204,6 @@ void DashboardPage::createChartViews()
     ui->dailyTrendChartContainerLayout->addWidget(dailyTrendChartView);
 }
 
-/*
- * 初始化 Top 5 热门帖子表格。
- */
 void DashboardPage::setupTopPostsTable()
 {
     ui->topPostsTable->setColumnCount(7);
@@ -258,21 +233,9 @@ void DashboardPage::setupTopPostsTable()
     ui->topPostsTable->horizontalHeader()->setSectionResizeMode(6, QHeaderView::ResizeToContents);
 }
 
-/*
- * 刷新整个 Dashboard。
- *
- * 页面切换回来、点击 Refresh、导入 CSV 后都可以调用。
- */
 void DashboardPage::refreshDashboard()
 {
-
-    refreshSummaryCards();
-    refreshPlatformPieChart();
-    refreshPlatformBarChart();
-    refreshDailyTrendChart();
-    refreshTopPostsTable();
-
-    setMessage(QStringLiteral("Dashboard visualization refreshed."));
+    emit dashboardRefreshRequested();
 }
 
 void DashboardPage::onRefreshClicked()
@@ -280,30 +243,25 @@ void DashboardPage::onRefreshClicked()
     refreshDashboard();
 }
 
-/*
- * 刷新顶部 4 个统计卡片。
- */
-void DashboardPage::refreshSummaryCards()
+void DashboardPage::showDashboard(const DashboardViewModel& viewModel)
 {
-    const DashboardVisualizationSummary summary =
-        visualizationService.loadSummary();
+    renderSummaryCards(viewModel.summary);
+    renderPlatformPieChart(viewModel.platformMetrics);
+    renderPlatformBarChart(viewModel.platformMetrics);
+    renderDailyTrendChart(viewModel.dailyMetrics);
+    renderTopPostsTable(viewModel.topPosts);
+}
 
+void DashboardPage::renderSummaryCards(const DashboardVisualizationSummary& summary)
+{
     ui->totalPostsValueLabel->setText(formatNumber(summary.totalPosts));
     ui->interactionsValueLabel->setText(formatNumber(summary.totalInteractions));
     ui->viewsValueLabel->setText(formatNumber(summary.totalViews));
     ui->engagementValueLabel->setText(formatPercent(summary.engagementRate));
 }
 
-/*
- * 刷新平台帖子占比饼图。
- *
- * QPieSeries 会根据每个 slice 的 value 自动计算占比。
- */
-void DashboardPage::refreshPlatformPieChart()
+void DashboardPage::renderPlatformPieChart(const QList<PlatformMetric>& metrics)
 {
-    const QList<PlatformMetric> metrics =
-        visualizationService.loadPlatformMetrics();
-
     auto *series = new QPieSeries();
 
     if (metrics.isEmpty()) {
@@ -327,10 +285,6 @@ void DashboardPage::refreshPlatformPieChart()
                 );
         }
 
-        /*
-         * 鼠标悬浮时轻微突出切片。
-         * 这是纯 UI 交互，不影响数据。
-         */
         connect(slice, &QPieSlice::hovered,
                 slice, [slice](bool hovered) {
                     slice->setExploded(hovered);
@@ -348,17 +302,8 @@ void DashboardPage::refreshPlatformPieChart()
     replaceChart(platformPieChartView, chart);
 }
 
-/*
- * 刷新平台互动量柱状图。
- *
- * 每个平台显示一个柱子：
- * interactions = likes + comments + shares。
- */
-void DashboardPage::refreshPlatformBarChart()
+void DashboardPage::renderPlatformBarChart(const QList<PlatformMetric>& metrics)
 {
-    const QList<PlatformMetric> metrics =
-        visualizationService.loadPlatformMetrics();
-
     auto *barSet = new QBarSet(QStringLiteral("Interactions"));
     QStringList categories;
 
@@ -407,17 +352,8 @@ void DashboardPage::refreshPlatformBarChart()
     replaceChart(platformBarChartView, chart);
 }
 
-/*
- * 刷新最近 14 天互动趋势折线图。
- *
- * 横轴：日期；
- * 纵轴：当天互动量。
- */
-void DashboardPage::refreshDailyTrendChart()
+void DashboardPage::renderDailyTrendChart(const QList<DailyMetric>& metrics)
 {
-    const QList<DailyMetric> metrics =
-        visualizationService.loadDailyMetrics(14);
-
     auto *series = new QLineSeries();
     series->setName(QStringLiteral("Interactions"));
 
@@ -468,14 +404,9 @@ void DashboardPage::refreshDailyTrendChart()
     replaceChart(dailyTrendChartView, chart);
 }
 
-/*
- * 刷新 Top 5 热门帖子表格。
- */
-void DashboardPage::refreshTopPostsTable()
+void DashboardPage::renderTopPostsTable(const QList<TopPostMetric>& posts)
 {
-    const QList<TopPostMetric> posts =
-        visualizationService.loadTopPosts(5);
-
+    ui->topPostsTable->clearContents();
     ui->topPostsTable->setRowCount(posts.size());
 
     for (int row = 0; row < posts.size(); ++row) {
@@ -485,34 +416,16 @@ void DashboardPage::refreshTopPostsTable()
                                      ? post.publishDate.toString(QStringLiteral("yyyy-MM-dd"))
                                      : QStringLiteral("-");
 
-        const QStringList values = {
-            QString::number(row + 1),
-            post.platform,
-            post.accountName,
-            shortText(post.content, 60),
-            dateText,
-            formatNumber(post.interactions),
-            formatPercent(post.engagementRate)
-        };
-
-        for (int column = 0; column < values.size(); ++column) {
-            auto *item = new QTableWidgetItem(values.at(column));
-
-            if (column == 0 || column == 4 || column == 5 || column == 6) {
-                item->setTextAlignment(Qt::AlignCenter);
-            }
-
-            ui->topPostsTable->setItem(row, column, item);
-        }
+        ui->topPostsTable->setItem(row, 0, createTableItem(QString::number(row + 1)));
+        ui->topPostsTable->setItem(row, 1, createTableItem(post.platform, Qt::AlignLeft | Qt::AlignVCenter));
+        ui->topPostsTable->setItem(row, 2, createTableItem(post.accountName, Qt::AlignLeft | Qt::AlignVCenter));
+        ui->topPostsTable->setItem(row, 3, createTableItem(shortText(post.content, 60), Qt::AlignLeft | Qt::AlignVCenter));
+        ui->topPostsTable->setItem(row, 4, createTableItem(dateText));
+        ui->topPostsTable->setItem(row, 5, createTableItem(formatNumber(post.interactions)));
+        ui->topPostsTable->setItem(row, 6, createTableItem(formatPercent(post.engagementRate)));
     }
 }
 
-/*
- * 替换 QChartView 中的图表。
- *
- * QChartView 接管 newChart 的所有权。
- * 旧 chart 需要主动删除，避免多次刷新造成内存泄漏。
- */
 void DashboardPage::replaceChart(QChartView *chartView,
                                  QChart *newChart)
 {
@@ -529,30 +442,24 @@ void DashboardPage::replaceChart(QChartView *chartView,
     }
 }
 
-/*
- * 简单数字格式化。
- *
- * 这里不用本地化分隔符，避免不同系统显示不一致。
- */
+QTableWidgetItem *DashboardPage::createTableItem(const QString& text,
+                                                 Qt::Alignment alignment) const
+{
+    QTableWidgetItem *item = new QTableWidgetItem(text);
+    item->setTextAlignment(alignment);
+    return item;
+}
+
 QString DashboardPage::formatNumber(qint64 value) const
 {
     return QString::number(value);
 }
 
-/*
- * 百分比格式化。
- *
- * 例如：
- * 0.125 -> 12.50%
- */
 QString DashboardPage::formatPercent(double value) const
 {
     return QStringLiteral("%1%").arg(value * 100.0, 0, 'f', 2);
 }
 
-/*
- * 表格中显示长内容时截断，避免撑爆列宽。
- */
 QString DashboardPage::shortText(const QString& text,
                                  int maxLength) const
 {
@@ -565,8 +472,8 @@ QString DashboardPage::shortText(const QString& text,
     return cleaned.left(maxLength - 3) + QStringLiteral("...");
 }
 
-void DashboardPage::setMessage(const QString& message,
-                               bool error)
+void DashboardPage::showMessage(const QString& message,
+                                bool error)
 {
     ui->messageLabel->setText(message);
     ui->messageLabel->setStyleSheet(AppStyle::messageLabelStyle(error));

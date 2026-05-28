@@ -1,6 +1,7 @@
 #include "logpage.h"
 #include "ui_logpage.h"
 
+#include "../controllers/logcontroller.h"
 #include "../styles/appstyle.h"
 
 #include <QAbstractItemView>
@@ -13,6 +14,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QList>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QTableWidget>
 #include <QTableWidgetItem>
@@ -20,10 +22,11 @@
 
 LogPage::LogPage(QWidget *parent)
     : QWidget(parent),
-    ui(new Ui::LogPage)
+    ui(new Ui::LogPage),
+    logController(nullptr)
 {
     /*
-     * setupUi() 会读取 forms/logpage.ui，
+     * setupUi() 会读取 forms/LogPage.ui，
      * 自动创建标题、筛选卡片、日期控件、按钮、表格和提示 Label。
      */
     ui->setupUi(this);
@@ -32,6 +35,15 @@ LogPage::LogPage(QWidget *parent)
     setupTable();
     connectSignals();
     applyStyleSheet();
+
+    /*
+     * 当前批次为了减少 MainWindow 改动，
+     * Controller 先由页面内部创建。
+     *
+     * 后续如果重构 MainWindowController，
+     * 可以改成由上层统一创建并注入。
+     */
+    logController = new LogController(this, this);
 
     refreshLogs();
 }
@@ -70,29 +82,23 @@ void LogPage::prepareUiObjects()
 
     /*
      * 下拉框显示文本给用户看，currentData() 存真实查询值。
-     * LogService 查询时使用 action 字段，例如 login、create_user。
+     *
+     * 注意：
+     * 当前项目里旧日志和新日志 action 可能存在命名差异。
+     * 后续最终清理时建议统一 action 常量。
      */
     ui->actionComboBox->clear();
     ui->actionComboBox->addItem(QStringLiteral("All Actions"), QString());
     ui->actionComboBox->addItem(QStringLiteral("Login"), QStringLiteral("login"));
     ui->actionComboBox->addItem(QStringLiteral("Create User"), QStringLiteral("create_user"));
+    ui->actionComboBox->addItem(QStringLiteral("Enable User"), QStringLiteral("enable_user"));
+    ui->actionComboBox->addItem(QStringLiteral("Disable User"), QStringLiteral("disable_user"));
+    ui->actionComboBox->addItem(QStringLiteral("Reset Password"), QStringLiteral("reset_password"));
     ui->actionComboBox->addItem(QStringLiteral("Add Post"), QStringLiteral("add_post"));
     ui->actionComboBox->addItem(QStringLiteral("Update Post"), QStringLiteral("update_post"));
     ui->actionComboBox->addItem(QStringLiteral("Delete Post"), QStringLiteral("delete_post"));
     ui->actionComboBox->addItem(QStringLiteral("Import CSV"), QStringLiteral("import_csv"));
-    ui->actionComboBox->addItem(QStringLiteral("Export Report"), QStringLiteral("export_report"));
-
-    ui->dateRangeCheckBox->setChecked(false);
-
-    ui->startDateEdit->setDate(QDate::currentDate().addDays(-7));
-    ui->startDateEdit->setDisplayFormat(QStringLiteral("yyyy-MM-dd"));
-    ui->startDateEdit->setCalendarPopup(true);
-    ui->startDateEdit->setEnabled(false);
-
-    ui->endDateEdit->setDate(QDate::currentDate());
-    ui->endDateEdit->setDisplayFormat(QStringLiteral("yyyy-MM-dd"));
-    ui->endDateEdit->setCalendarPopup(true);
-    ui->endDateEdit->setEnabled(false);
+    ui->actionComboBox->addItem(QStringLiteral("Export Report"), QStringLiteral("Export Report"));
 
     ui->searchButton->setObjectName(QStringLiteral("primaryButton"));
     ui->resetButton->setObjectName(QStringLiteral("secondaryButton"));
@@ -109,6 +115,8 @@ void LogPage::prepareUiObjects()
             button->setCursor(Qt::PointingHandCursor);
         }
     }
+
+    resetFilterControls();
 }
 
 /*
@@ -175,21 +183,15 @@ void LogPage::setupTable()
     ui->logTable->horizontalHeader()->setSectionResizeMode(6, QHeaderView::ResizeToContents);
 }
 
+/*
+ * 刷新日志。
+ *
+ * View 不再直接调用 LogService，
+ * 只负责把当前筛选条件发给 Controller。
+ */
 void LogPage::refreshLogs()
 {
-    /*
-     * 这里不直接拼 SQL。
-     * 页面只负责收集筛选条件，真正查询交给 LogService。
-     */
-    const QList<OperationLog> logs = logService.findLogs(
-        ui->usernameLineEdit->text().trimmed(),
-        selectedAction(),
-        startDateTime(),
-        endDateTime(),
-        300
-        );
-
-    fillTable(logs);
+    emit searchLogsRequested(readFilterFromUi());
 }
 
 void LogPage::onSearchClicked()
@@ -199,18 +201,19 @@ void LogPage::onSearchClicked()
 
 void LogPage::onResetClicked()
 {
-    ui->usernameLineEdit->clear();
-    ui->actionComboBox->setCurrentIndex(0);
-
-    ui->dateRangeCheckBox->setChecked(false);
-    ui->startDateEdit->setDate(QDate::currentDate().addDays(-7));
-    ui->endDateEdit->setDate(QDate::currentDate());
-
+    resetFilterControls();
     refreshLogs();
+}
+
+void LogPage::showLogs(const QList<OperationLog>& logs)
+{
+    fillTable(logs);
+    showMessage(QStringLiteral("Loaded %1 operation log records.").arg(logs.size()));
 }
 
 void LogPage::fillTable(const QList<OperationLog>& logs)
 {
+    ui->logTable->clearContents();
     ui->logTable->setRowCount(logs.size());
 
     for (int row = 0; row < logs.size(); ++row) {
@@ -220,29 +223,49 @@ void LogPage::fillTable(const QList<OperationLog>& logs)
                                        ? QString::number(log.userId)
                                        : QStringLiteral("-");
 
-        const QStringList values = {
-            QString::number(log.logId),
-            userIdText,
-            log.username,
-            log.action,
-            log.detail,
-            log.result,
-            log.createdAt.toString(QStringLiteral("yyyy-MM-dd HH:mm:ss"))
-        };
-
-        for (int column = 0; column < values.size(); ++column) {
-            auto *item = new QTableWidgetItem(values.at(column));
-
-            // ID、结果、时间居中，详情列保持左对齐，阅读长文本更舒服。
-            if (column == 0 || column == 1 || column == 5 || column == 6) {
-                item->setTextAlignment(Qt::AlignCenter);
-            }
-
-            ui->logTable->setItem(row, column, item);
-        }
+        ui->logTable->setItem(row, 0, createTableItem(QString::number(log.logId)));
+        ui->logTable->setItem(row, 1, createTableItem(userIdText));
+        ui->logTable->setItem(row, 2, createTableItem(log.username, Qt::AlignLeft | Qt::AlignVCenter));
+        ui->logTable->setItem(row, 3, createTableItem(log.action, Qt::AlignLeft | Qt::AlignVCenter));
+        ui->logTable->setItem(row, 4, createTableItem(log.detail, Qt::AlignLeft | Qt::AlignVCenter));
+        ui->logTable->setItem(row, 5, createTableItem(log.result));
+        ui->logTable->setItem(
+            row,
+            6,
+            createTableItem(log.createdAt.toString(QStringLiteral("yyyy-MM-dd HH:mm:ss")))
+            );
     }
+}
 
-    setMessage(QStringLiteral("Loaded %1 operation log records.").arg(logs.size()));
+OperationLogFilter LogPage::readFilterFromUi() const
+{
+    OperationLogFilter filter;
+
+    filter.usernameKeyword = ui->usernameLineEdit->text().trimmed();
+    filter.action = selectedAction();
+    filter.startTime = startDateTime();
+    filter.endTime = endDateTime();
+    filter.limit = 300;
+
+    return filter;
+}
+
+void LogPage::resetFilterControls()
+{
+    ui->usernameLineEdit->clear();
+    ui->actionComboBox->setCurrentIndex(0);
+
+    ui->dateRangeCheckBox->setChecked(false);
+
+    ui->startDateEdit->setDate(QDate::currentDate().addDays(-7));
+    ui->startDateEdit->setDisplayFormat(QStringLiteral("yyyy-MM-dd"));
+    ui->startDateEdit->setCalendarPopup(true);
+    ui->startDateEdit->setEnabled(false);
+
+    ui->endDateEdit->setDate(QDate::currentDate());
+    ui->endDateEdit->setDisplayFormat(QStringLiteral("yyyy-MM-dd"));
+    ui->endDateEdit->setCalendarPopup(true);
+    ui->endDateEdit->setEnabled(false);
 }
 
 QString LogPage::selectedAction() const
@@ -268,9 +291,23 @@ QDateTime LogPage::endDateTime() const
     return QDateTime(ui->endDateEdit->date(), QTime(23, 59, 59));
 }
 
-void LogPage::setMessage(const QString& message,
-                         bool error)
+QTableWidgetItem *LogPage::createTableItem(const QString& text,
+                                           Qt::Alignment alignment) const
+{
+    QTableWidgetItem *item = new QTableWidgetItem(text);
+    item->setTextAlignment(alignment);
+    return item;
+}
+
+void LogPage::showMessage(const QString& message,
+                          bool error)
 {
     ui->messageLabel->setText(message);
     ui->messageLabel->setStyleSheet(AppStyle::messageLabelStyle(error));
+}
+
+void LogPage::showWarningMessage(const QString& title,
+                                 const QString& message)
+{
+    QMessageBox::warning(this, title, message);
 }

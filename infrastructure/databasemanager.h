@@ -13,6 +13,7 @@
  * - 初始化 posts 表；
  * - 初始化 operation_logs 表；
  * - 创建默认管理员；
+ * - 兼容旧数据库结构升级；
  * - 提供全局数据库连接；
  * - 保存最近一次数据库错误。
  *
@@ -52,6 +53,19 @@ private:
 
     // 创建默认管理员账号。
     static bool createDefaultAdmin();
+
+    /*
+     * 数据库升级：为 posts 表补充数据归属字段。
+     *
+     * 说明：
+     * 如果用户本地已经存在旧 posts 表，CREATE TABLE IF NOT EXISTS 不会修改旧表结构。
+     * 所以这里额外检查字段是否存在，不存在就 ALTER TABLE 补上。
+     */
+    static bool ensurePostOwnerColumns();
+
+    // 判断某个表是否已经存在指定字段。
+    static bool columnExists(const QString& tableName,
+                             const QString& columnName);
 
     // 数据库连接名统一收口。
     static QString connectionName();

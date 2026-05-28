@@ -1,47 +1,86 @@
 #include "dashboardvisualizationservice.h"
-#include "databasemanager.h"
 
+#include "../infrastructure/databasemanager.h"
+
+#include <QDate>
 #include <QDebug>
-#include <QMap>
 #include <QSqlError>
 #include <QSqlQuery>
-#include <QSqlRecord>
-#include <QVariant>
+#include <QtGlobal>
+
+namespace
+{
+/*
+ * Dashboard 数据权限 SQL 片段。
+ *
+ * admin：
+ * - 不追加 owner 条件；
+ *
+ * 普通 user：
+ * - 追加 created_by_user_id = :owner_user_id；
+ *
+ * 未登录：
+ * - Controller / Service 一般不会让未登录用户进入 Dashboard；
+ * - 但为了安全，这里仍然会把未登录当作普通用户处理，owner_user_id 为 -1，
+ *   最终查不到数据。
+ */
+void appendOwnerFilter(QString& sql,
+                       const User& currentUser)
+{
+    if (currentUser.isValid() && currentUser.isAdmin()) {
+        return;
+    }
+
+    sql += QStringLiteral("AND created_by_user_id = :owner_user_id ");
+}
+
+void bindOwnerFilter(QSqlQuery& query,
+                     const User& currentUser)
+{
+    if (currentUser.isValid() && currentUser.isAdmin()) {
+        return;
+    }
+
+    const int ownerUserId = currentUser.isValid()
+                                ? currentUser.userId
+                                : -1;
+
+    query.bindValue(QStringLiteral(":owner_user_id"), ownerUserId);
+}
+}
 
 DashboardVisualizationService::DashboardVisualizationService()
 {
 }
 
-/*
- * 读取 Dashboard 顶部 4 个核心指标：
- * - 总帖子数；
- * - 总互动量；
- * - 总浏览量；
- * - 整体互动率。
- */
-DashboardVisualizationSummary DashboardVisualizationService::loadSummary() const
+DashboardVisualizationSummary DashboardVisualizationService::loadSummary(const User& currentUser) const
 {
     DashboardVisualizationSummary summary;
 
-    QSqlQuery query(DatabaseManager::database());
-
-    query.prepare(
+    QString sql = QStringLiteral(
         "SELECT "
         "COUNT(*) AS total_posts, "
         "COALESCE(SUM(likes + comments + shares), 0) AS total_interactions, "
         "COALESCE(SUM(views), 0) AS total_views "
-        "FROM posts"
+        "FROM posts "
+        "WHERE 1 = 1 "
         );
 
+    appendOwnerFilter(sql, currentUser);
+
+    QSqlQuery query(DatabaseManager::database());
+    query.prepare(sql);
+    bindOwnerFilter(query, currentUser);
+
     if (!query.exec()) {
-        qWarning() << "Dashboard summary query failed:" << query.lastError().text();
+        qDebug() << "Load dashboard summary failed:" << query.lastError().text();
         return summary;
     }
 
     if (query.next()) {
-        summary.totalPosts = query.value("total_posts").toInt();
-        summary.totalInteractions = query.value("total_interactions").toLongLong();
-        summary.totalViews = query.value("total_views").toLongLong();
+        summary.totalPosts = query.value(0).toInt();
+        summary.totalInteractions = query.value(1).toLongLong();
+        summary.totalViews = query.value(2).toLongLong();
 
         if (summary.totalViews > 0) {
             summary.engagementRate =
@@ -53,41 +92,43 @@ DashboardVisualizationSummary DashboardVisualizationService::loadSummary() const
     return summary;
 }
 
-/*
- * 按平台统计数据。
- *
- * 饼图使用 postCount；
- * 柱状图使用 interactions。
- */
-QList<PlatformMetric> DashboardVisualizationService::loadPlatformMetrics() const
+QList<PlatformMetric> DashboardVisualizationService::loadPlatformMetrics(const User& currentUser) const
 {
-    QList<PlatformMetric> result;
+    QList<PlatformMetric> metrics;
 
-    QSqlQuery query(DatabaseManager::database());
-
-    query.prepare(
+    QString sql = QStringLiteral(
         "SELECT "
         "platform, "
         "COUNT(*) AS post_count, "
         "COALESCE(SUM(likes + comments + shares), 0) AS interactions, "
         "COALESCE(SUM(views), 0) AS views "
         "FROM posts "
-        "GROUP BY platform "
-        "ORDER BY interactions DESC"
+        "WHERE 1 = 1 "
         );
 
+    appendOwnerFilter(sql, currentUser);
+
+    sql += QStringLiteral(
+        "GROUP BY platform "
+        "ORDER BY post_count DESC, interactions DESC, platform ASC"
+        );
+
+    QSqlQuery query(DatabaseManager::database());
+    query.prepare(sql);
+    bindOwnerFilter(query, currentUser);
+
     if (!query.exec()) {
-        qWarning() << "Platform metrics query failed:" << query.lastError().text();
-        return result;
+        qDebug() << "Load platform metrics failed:" << query.lastError().text();
+        return metrics;
     }
 
     while (query.next()) {
         PlatformMetric metric;
 
-        metric.platform = query.value("platform").toString();
-        metric.postCount = query.value("post_count").toInt();
-        metric.interactions = query.value("interactions").toLongLong();
-        metric.views = query.value("views").toLongLong();
+        metric.platform = query.value(0).toString();
+        metric.postCount = query.value(1).toInt();
+        metric.interactions = query.value(2).toLongLong();
+        metric.views = query.value(3).toLongLong();
 
         if (metric.views > 0) {
             metric.engagementRate =
@@ -95,106 +136,71 @@ QList<PlatformMetric> DashboardVisualizationService::loadPlatformMetrics() const
                 / static_cast<double>(metric.views);
         }
 
-        result.append(metric);
+        metrics.append(metric);
     }
 
-    return result;
+    return metrics;
 }
 
-/*
- * 读取最近 days 天的每日趋势数据。
- *
- * 这里会主动补齐没有数据的日期。
- * 例如某天没有发帖，也会返回 interactions = 0。
- * 这样折线图不会断开。
- */
-QList<DailyMetric> DashboardVisualizationService::loadDailyMetrics(int days) const
+QList<DailyMetric> DashboardVisualizationService::loadDailyMetrics(const User& currentUser,
+                                                                   int days) const
 {
-    QList<DailyMetric> result;
+    QList<DailyMetric> metrics;
 
-    if (days <= 0) {
-        days = 14;
-    }
-
+    const int safeDays = qMax(1, days);
+    const QDate startDate = QDate::currentDate().addDays(-(safeDays - 1));
     const QDate endDate = QDate::currentDate();
-    const QDate startDate = endDate.addDays(-(days - 1));
 
-    QMap<QDate, DailyMetric> metricMap;
-
-    for (int i = 0; i < days; ++i) {
-        const QDate date = startDate.addDays(i);
-
-        DailyMetric emptyMetric;
-        emptyMetric.date = date;
-
-        metricMap.insert(date, emptyMetric);
-    }
-
-    QSqlQuery query(DatabaseManager::database());
-
-    query.prepare(
+    QString sql = QStringLiteral(
         "SELECT "
         "publish_date, "
         "COUNT(*) AS post_count, "
         "COALESCE(SUM(likes + comments + shares), 0) AS interactions, "
         "COALESCE(SUM(views), 0) AS views "
         "FROM posts "
-        "WHERE date(publish_date) >= date(:start_date) "
-        "AND date(publish_date) <= date(:end_date) "
+        "WHERE publish_date BETWEEN :start_date AND :end_date "
+        );
+
+    appendOwnerFilter(sql, currentUser);
+
+    sql += QStringLiteral(
         "GROUP BY publish_date "
         "ORDER BY publish_date ASC"
         );
 
-    query.bindValue(":start_date", startDate.toString("yyyy-MM-dd"));
-    query.bindValue(":end_date", endDate.toString("yyyy-MM-dd"));
+    QSqlQuery query(DatabaseManager::database());
+    query.prepare(sql);
+
+    query.bindValue(QStringLiteral(":start_date"), startDate.toString(Qt::ISODate));
+    query.bindValue(QStringLiteral(":end_date"), endDate.toString(Qt::ISODate));
+
+    bindOwnerFilter(query, currentUser);
 
     if (!query.exec()) {
-        qWarning() << "Daily metrics query failed:" << query.lastError().text();
-    } else {
-        while (query.next()) {
-            const QDate date = QDate::fromString(
-                query.value("publish_date").toString(),
-                "yyyy-MM-dd"
-                );
-
-            if (!date.isValid() || !metricMap.contains(date)) {
-                continue;
-            }
-
-            DailyMetric metric;
-            metric.date = date;
-            metric.postCount = query.value("post_count").toInt();
-            metric.interactions = query.value("interactions").toLongLong();
-            metric.views = query.value("views").toLongLong();
-
-            metricMap[date] = metric;
-        }
+        qDebug() << "Load daily metrics failed:" << query.lastError().text();
+        return metrics;
     }
 
-    for (auto it = metricMap.constBegin(); it != metricMap.constEnd(); ++it) {
-        result.append(it.value());
+    while (query.next()) {
+        DailyMetric metric;
+
+        metric.date = query.value(0).toDate();
+        metric.postCount = query.value(1).toInt();
+        metric.interactions = query.value(2).toLongLong();
+        metric.views = query.value(3).toLongLong();
+
+        metrics.append(metric);
     }
 
-    return result;
+    return metrics;
 }
 
-/*
- * 读取 Top N 热门帖子。
- *
- * 排序规则：
- * interactions = likes + comments + shares
- */
-QList<TopPostMetric> DashboardVisualizationService::loadTopPosts(int limit) const
+QList<TopPostMetric> DashboardVisualizationService::loadTopPosts(const User& currentUser,
+                                                                 int limit) const
 {
-    QList<TopPostMetric> result;
+    QList<TopPostMetric> topPosts;
 
-    if (limit <= 0) {
-        limit = 5;
-    }
-
-    QSqlQuery query(DatabaseManager::database());
-
-    query.prepare(
+    QString sql = QStringLiteral(
         "SELECT "
         "post_id, "
         "platform, "
@@ -204,39 +210,54 @@ QList<TopPostMetric> DashboardVisualizationService::loadTopPosts(int limit) cons
         "(likes + comments + shares) AS interactions, "
         "views "
         "FROM posts "
-        "ORDER BY interactions DESC, views DESC "
-        "LIMIT :limit"
+        "WHERE 1 = 1 "
         );
 
-    query.bindValue(":limit", limit);
+    appendOwnerFilter(sql, currentUser);
+
+    sql += QStringLiteral(
+               "ORDER BY interactions DESC, views DESC, post_id DESC "
+               "LIMIT %1"
+               ).arg(qMax(1, limit));
+
+    QSqlQuery query(DatabaseManager::database());
+    query.prepare(sql);
+    bindOwnerFilter(query, currentUser);
 
     if (!query.exec()) {
-        qWarning() << "Top posts query failed:" << query.lastError().text();
-        return result;
+        qDebug() << "Load top posts failed:" << query.lastError().text();
+        return topPosts;
     }
 
     while (query.next()) {
-        TopPostMetric metric;
+        TopPostMetric post;
 
-        metric.postId = query.value("post_id").toInt();
-        metric.platform = query.value("platform").toString();
-        metric.accountName = query.value("account_name").toString();
-        metric.content = query.value("content").toString();
-        metric.publishDate = QDate::fromString(
-            query.value("publish_date").toString(),
-            "yyyy-MM-dd"
-            );
-        metric.interactions = query.value("interactions").toLongLong();
-        metric.views = query.value("views").toLongLong();
+        post.postId = query.value(0).toInt();
+        post.platform = query.value(1).toString();
+        post.accountName = query.value(2).toString();
+        post.content = query.value(3).toString();
+        post.publishDate = query.value(4).toDate();
+        post.interactions = query.value(5).toLongLong();
+        post.views = query.value(6).toLongLong();
 
-        if (metric.views > 0) {
-            metric.engagementRate =
-                static_cast<double>(metric.interactions)
-                / static_cast<double>(metric.views);
+        if (post.views > 0) {
+            post.engagementRate =
+                static_cast<double>(post.interactions)
+                / static_cast<double>(post.views);
         }
 
-        result.append(metric);
+        topPosts.append(post);
     }
 
-    return result;
+    return topPosts;
+}
+
+bool DashboardVisualizationService::shouldIncludeAllUsers(const User& currentUser) const
+{
+    return currentUser.isValid() && currentUser.isAdmin();
+}
+
+bool DashboardVisualizationService::shouldApplyOwnerFilter(const User& currentUser) const
+{
+    return !shouldIncludeAllUsers(currentUser);
 }

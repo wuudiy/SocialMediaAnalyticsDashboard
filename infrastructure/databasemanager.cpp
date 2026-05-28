@@ -41,6 +41,16 @@ bool DatabaseManager::initialize()
         return false;
     }
 
+    /*
+     * 兼容旧数据库。
+     *
+     * 如果 posts 表是旧版本创建的，里面没有数据归属字段，
+     * 这里会自动补充 created_by_user_id 和 created_by_username。
+     */
+    if (!ensurePostOwnerColumns()) {
+        return false;
+    }
+
     if (!createOperationLogsTable()) {
         return false;
     }
@@ -141,7 +151,17 @@ bool DatabaseManager::createUsersTable()
     return true;
 }
 
-// 创建 posts 表。这个表是帖子管理、统计分析、Dashboard 展示的基础。
+/*
+ * 创建 posts 表。
+ *
+ * 新版本增加了数据归属字段：
+ * - created_by_user_id：创建 / 导入数据的用户 ID；
+ * - created_by_username：创建 / 导入数据的用户名。
+ *
+ * 注意：
+ * 如果 posts 表已经存在，CREATE TABLE IF NOT EXISTS 不会改变旧表结构。
+ * 所以 initialize() 里还会调用 ensurePostOwnerColumns() 做旧表升级。
+ */
 bool DatabaseManager::createPostsTable()
 {
     QSqlQuery query(database());
@@ -157,7 +177,12 @@ bool DatabaseManager::createPostsTable()
         "    comments INT NOT NULL DEFAULT 0,"
         "    shares INT NOT NULL DEFAULT 0,"
         "    views INT NOT NULL DEFAULT 0,"
-        "    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+        "    created_by_user_id INT NULL,"
+        "    created_by_username VARCHAR(255),"
+        "    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
+        "    INDEX idx_posts_platform (platform),"
+        "    INDEX idx_posts_publish_date (publish_date),"
+        "    INDEX idx_posts_created_by_user_id (created_by_user_id)"
         ")"
         );
 
@@ -267,6 +292,88 @@ bool DatabaseManager::createDefaultAdmin()
     }
 
     return true;
+}
+
+/*
+ * 旧数据库升级：补充 posts 表的数据归属字段。
+ *
+ * 旧数据不会强行分配给某个用户：
+ * - created_by_user_id 默认为 NULL；
+ * - admin 可以看到这些旧数据；
+ * - 普通 user 看不到这些旧数据。
+ */
+bool DatabaseManager::ensurePostOwnerColumns()
+{
+    QSqlQuery query(database());
+
+    if (!columnExists(QStringLiteral("posts"), QStringLiteral("created_by_user_id"))) {
+        if (!query.exec(QStringLiteral(
+                "ALTER TABLE posts "
+                "ADD COLUMN created_by_user_id INT NULL"
+                ))) {
+            setLastError(query.lastError().text());
+
+            qDebug().noquote() << QStringLiteral("Add posts.created_by_user_id failed: %1")
+                                      .arg(query.lastError().text());
+
+            return false;
+        }
+    }
+
+    if (!columnExists(QStringLiteral("posts"), QStringLiteral("created_by_username"))) {
+        if (!query.exec(QStringLiteral(
+                "ALTER TABLE posts "
+                "ADD COLUMN created_by_username VARCHAR(255)"
+                ))) {
+            setLastError(query.lastError().text());
+
+            qDebug().noquote() << QStringLiteral("Add posts.created_by_username failed: %1")
+                                      .arg(query.lastError().text());
+
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/*
+ * 判断某个表是否存在指定字段。
+ *
+ * 使用 INFORMATION_SCHEMA.COLUMNS 查询当前数据库结构。
+ */
+bool DatabaseManager::columnExists(const QString& tableName,
+                                   const QString& columnName)
+{
+    QSqlQuery query(database());
+
+    query.prepare(
+        QStringLiteral(
+            "SELECT COUNT(*) "
+            "FROM INFORMATION_SCHEMA.COLUMNS "
+            "WHERE TABLE_SCHEMA = DATABASE() "
+            "AND TABLE_NAME = :table_name "
+            "AND COLUMN_NAME = :column_name"
+            )
+        );
+
+    query.bindValue(QStringLiteral(":table_name"), tableName);
+    query.bindValue(QStringLiteral(":column_name"), columnName);
+
+    if (!query.exec()) {
+        setLastError(query.lastError().text());
+
+        qDebug().noquote() << QStringLiteral("Check column exists failed: %1")
+                                  .arg(query.lastError().text());
+
+        return false;
+    }
+
+    if (!query.next()) {
+        return false;
+    }
+
+    return query.value(0).toInt() > 0;
 }
 
 QString DatabaseManager::connectionName()

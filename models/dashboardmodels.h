@@ -2,6 +2,7 @@
 #define DASHBOARDMODELS_H
 
 #include <QDate>
+#include <QList>
 #include <QString>
 
 /*
@@ -67,6 +68,21 @@ struct TopPostMetric
     qint64 interactions = 0;
     qint64 views = 0;
     double engagementRate = 0.0;
+};
+
+/*
+ * Dashboard 页面一次刷新所需的完整数据。
+ *
+ * 说明：
+ * Controller 从 DashboardService 获取这个结构体，
+ * View 收到后只负责显示和绘制，不再主动查询数据库。
+ */
+struct DashboardViewModel
+{
+    DashboardVisualizationSummary summary;
+    QList<PlatformMetric> platformMetrics;
+    QList<DailyMetric> dailyMetrics;
+    QList<TopPostMetric> topPosts;
 };
 
 #endif // DASHBOARDMODELS_H

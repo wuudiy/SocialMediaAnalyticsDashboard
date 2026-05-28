@@ -1,22 +1,41 @@
 #include "settingspage.h"
 #include "ui_SettingsPage.h"
 
+#include "../controllers/settingscontroller.h"
+#include "../styles/appstyle.h"
+
 #include <QDir>
 #include <QFileDialog>
+#include <QLineEdit>
 #include <QMessageBox>
-#include <QSettings>
+#include <QPushButton>
+#include <QTextEdit>
 
 SettingsPage::SettingsPage(QWidget *parent)
     : QWidget(parent),
-      ui(new Ui::SettingsPage),
-      exportDirectory(QString())
+    ui(new Ui::SettingsPage),
+    settingsController(nullptr)
 {
+    /*
+     * setupUi() 读取 forms/SettingsPage.ui，
+     * 自动创建导出设置区域、项目说明区域和状态 Label。
+     */
     ui->setupUi(this);
-    loadSettings();
-    setupProjectDescription();
 
-    connect(ui->browseDirButton, &QPushButton::clicked, this, &SettingsPage::onBrowseDirClicked);
-    connect(ui->saveExportSettingsButton, &QPushButton::clicked, this, &SettingsPage::onSaveExportSettingsClicked);
+    prepareUiObjects();
+    connectSignals();
+    applyStyleSheet();
+
+    /*
+     * 当前批次为了减少 MainWindow 改动，
+     * Controller 先由页面内部创建。
+     *
+     * 后续如果继续做 MainWindowController，
+     * 可以统一改成外部创建 Controller 并注入。
+     */
+    settingsController = new SettingsController(this, this);
+
+    refreshSettings();
 }
 
 SettingsPage::~SettingsPage()
@@ -24,66 +43,138 @@ SettingsPage::~SettingsPage()
     delete ui;
 }
 
-void SettingsPage::loadSettings()
+/*
+ * 初始化 .ui 中控件的运行时属性。
+ *
+ * .ui 保留布局；
+ * cpp 只设置样式名、只读状态、按钮光标等运行时属性。
+ */
+void SettingsPage::prepareUiObjects()
 {
-    QSettings settings(QStringLiteral("SocialMediaAnalytics"), QStringLiteral("Settings"));
-    exportDirectory = settings.value(QStringLiteral("exportDirectory"), QString()).toString();
+    setObjectName(QStringLiteral("settingsPage"));
 
-    if (!exportDirectory.isEmpty()) {
-        ui->exportDirEdit->setText(exportDirectory);
-    }
+    ui->pageTitle->setObjectName(QStringLiteral("pageTitle"));
+
+    ui->exportTitle->setObjectName(QStringLiteral("fieldLabel"));
+    ui->exportDirLabel->setObjectName(QStringLiteral("fieldLabel"));
+    ui->aboutTitle->setObjectName(QStringLiteral("fieldLabel"));
+    ui->versionLabel->setObjectName(QStringLiteral("fieldLabel"));
+    ui->buildDateLabel->setObjectName(QStringLiteral("fieldLabel"));
+    ui->descriptionTitle->setObjectName(QStringLiteral("fieldLabel"));
+
+    ui->statusLabel->setObjectName(QStringLiteral("messageLabel"));
+    ui->statusLabel->setWordWrap(true);
+
+    ui->exportDirEdit->setReadOnly(true);
+    ui->exportDirEdit->setPlaceholderText(QStringLiteral("No export directory selected."));
+
+    ui->descriptionTextEdit->setReadOnly(true);
+
+    ui->browseDirButton->setObjectName(QStringLiteral("secondaryButton"));
+    ui->saveExportSettingsButton->setObjectName(QStringLiteral("primaryButton"));
+
+    ui->browseDirButton->setCursor(Qt::PointingHandCursor);
+    ui->saveExportSettingsButton->setCursor(Qt::PointingHandCursor);
 }
 
-void SettingsPage::setupProjectDescription()
+/*
+ * 集中连接信号槽。
+ */
+void SettingsPage::connectSignals()
 {
-    QString description = QStringLiteral("Social Media Analytics Dashboard\n\n") +
-                          QStringLiteral("This application is a comprehensive social media analytics platform that allows users to:\n\n") +
-                          QStringLiteral("• Manage social media post data across multiple platforms (Weibo, Douyin, Bilibili, Xiaohongshu, WeChat)\n") +
-                          QStringLiteral("• View real-time analytics and statistics\n") +
-                          QStringLiteral("• Generate detailed reports and export data to CSV or TXT format\n") +
-                          QStringLiteral("• Track engagement rates and trending content\n") +
-                          QStringLiteral("• User management with role-based access control\n\n") +
-                          QStringLiteral("Built with Qt 5/6 and MySQL database.\n\n") +
-                          QStringLiteral("Team Members:\n") +
-                          QStringLiteral("• Team Leader: 吴裕勇 (Student ID: 8002124023)\n") +
-                          QStringLiteral("• Member 1: 熊倡 (Student ID: 8002124024)\n") +
-                          QStringLiteral("• Member 2: 王旭坤 (Student ID: 8002124022)\n") +
-                          QStringLiteral("• Member 3: 刘子懿 (Student ID: 8002124019)");
+    connect(ui->browseDirButton, &QPushButton::clicked,
+            this, &SettingsPage::onBrowseDirClicked);
 
+    connect(ui->saveExportSettingsButton, &QPushButton::clicked,
+            this, &SettingsPage::onSaveExportSettingsClicked);
+}
+
+void SettingsPage::applyStyleSheet()
+{
+    setStyleSheet(AppStyle::dataManagementPageStyle());
+}
+
+/*
+ * 刷新设置。
+ *
+ * View 不再直接读取 QSettings，
+ * 只发出加载请求，交给 Controller / Service 处理。
+ */
+void SettingsPage::refreshSettings()
+{
+    emit loadSettingsRequested();
+}
+
+void SettingsPage::showExportDirectory(const QString& directory)
+{
+    ui->exportDirEdit->setText(directory.trimmed());
+}
+
+void SettingsPage::showProjectDescription(const QString& description)
+{
     ui->descriptionTextEdit->setPlainText(description);
-}
-
-void SettingsPage::showStatus(const QString& message, bool success)
-{
-    ui->statusLabel->setText(message);
-    ui->statusLabel->setStyleSheet(success ? "color: green;" : "color: red;");
 }
 
 void SettingsPage::onBrowseDirClicked()
 {
-    QString dir = QFileDialog::getExistingDirectory(
-                this,
-                tr("Select Export Directory"),
-                exportDirectory.isEmpty() ? QDir::homePath() : exportDirectory,
-                QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks
-                );
+    /*
+     * QFileDialog 属于界面交互，保留在 View 层是合理的。
+     * 选择到目录后只更新输入框，不直接保存配置。
+     */
+    const QString directory = selectExportDirectory(currentExportDirectory());
 
-    if (!dir.isEmpty()) {
-        exportDirectory = dir;
-        ui->exportDirEdit->setText(dir);
-        showStatus(tr("Directory selected: ") + dir, true);
+    if (directory.trimmed().isEmpty()) {
+        return;
     }
+
+    showExportDirectory(directory);
+
+    showStatus(
+        QStringLiteral("Directory selected: %1").arg(directory),
+        true
+        );
 }
 
 void SettingsPage::onSaveExportSettingsClicked()
 {
-    if (exportDirectory.isEmpty()) {
-        QMessageBox::warning(this, tr("Warning"), tr("Please select an export directory first."));
-        return;
-    }
+    /*
+     * View 只把当前目录发给 Controller。
+     * 目录校验和 QSettings 保存不在 View 中做。
+     */
+    emit saveExportDirectoryRequested(currentExportDirectory());
+}
 
-    QSettings settings(QStringLiteral("SocialMediaAnalytics"), QStringLiteral("Settings"));
-    settings.setValue(QStringLiteral("exportDirectory"), exportDirectory);
+QString SettingsPage::selectExportDirectory(const QString& initialDirectory)
+{
+    return QFileDialog::getExistingDirectory(
+        this,
+        QStringLiteral("Select Export Directory"),
+        initialDirectory.trimmed().isEmpty()
+            ? QDir::homePath()
+            : initialDirectory.trimmed(),
+        QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks
+        );
+}
 
-    showStatus(tr("Export settings saved successfully!"), true);
+QString SettingsPage::currentExportDirectory() const
+{
+    return ui->exportDirEdit->text().trimmed();
+}
+
+void SettingsPage::showStatus(const QString& message,
+                              bool success)
+{
+    ui->statusLabel->setText(message);
+
+    /*
+     * AppStyle::messageLabelStyle(true) 表示错误样式，
+     * 所以这里传入 !success。
+     */
+    ui->statusLabel->setStyleSheet(AppStyle::messageLabelStyle(!success));
+}
+
+void SettingsPage::showWarningMessage(const QString& title,
+                                      const QString& message)
+{
+    QMessageBox::warning(this, title, message);
 }

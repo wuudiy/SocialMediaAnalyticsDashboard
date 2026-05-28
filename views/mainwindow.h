@@ -1,9 +1,11 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
+#include "../models/mainwindowmodels.h"
 #include "../models/user.h"
 
 #include <QMainWindow>
+#include <QString>
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -19,12 +21,27 @@ class PostManagementPage;
 class SettingsPage;
 class UserManagementPage;
 
+class MainWindowController;
 class QPushButton;
 class QWidget;
 
 /*
  * 登录后的主界面。
- * 负责页面创建、页面切换、权限控制和导航栏状态刷新。
+ *
+ * MVC 重构后，本类只负责 View 层：
+ * - 创建子页面；
+ * - 创建滚动容器；
+ * - 显示指定页面；
+ * - 设置导航按钮高亮；
+ * - 显示用户信息；
+ * - 显示权限弹窗；
+ * - 发出导航、退出和用户切换信号。
+ *
+ * 不再负责：
+ * - 判断管理员权限；
+ * - 决定某页面是否能打开；
+ * - 保存导航业务状态；
+ * - 生成用户信息展示文本。
  */
 class MainWindow : public QMainWindow
 {
@@ -34,7 +51,49 @@ public:
     explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
 
+    /*
+     * LoginView 登录成功后仍调用这个函数。
+     * 函数内部只发信号，具体状态处理交给 MainWindowController。
+     */
     void setCurrentUser(const User& user);
+
+    /*
+     * Controller 调用：应用当前登录用户状态。
+     */
+    void applyCurrentUserState(const User& user,
+                               const QString& windowTitle,
+                               const QString& userInfoText,
+                               bool canUseAdminPages);
+
+    /*
+     * Controller 调用：显示指定页面。
+     */
+    void navigateToPage(MainWindowPage page,
+                        const QString& title);
+
+    /*
+     * Controller 调用：显示权限不足提示。
+     */
+    void showAccessDeniedMessage(const QString& title,
+                                 const QString& message);
+
+    /*
+     * Controller 调用：显示状态栏提示。
+     */
+    void showStatusMessage(const QString& message,
+                           int timeoutMs = 3000);
+
+    /*
+     * Controller 调用：退出前确认。
+     */
+    bool confirmExitApplication();
+
+signals:
+    void currentUserChanged(const User& user);
+
+    void navigationRequested(MainWindowPage page);
+
+    void logoutRequested();
 
 private slots:
     void showDashboardPage();
@@ -52,9 +111,6 @@ private:
     void connectSignals();
     void applyStyleSheet();
 
-    QWidget* createPlaceholderPage(const QString& title,
-                                   const QString& description);
-
     // 给页面套滚动区域，避免默认窗口下内容被压缩错版。
     QWidget* createScrollablePage(QWidget *page);
 
@@ -66,11 +122,13 @@ private:
                     QPushButton *activeButton);
 
     void setActiveNavButton(QPushButton *activeButton);
-    void updateRoleAccess();
-    bool isAdminUser() const;
+
+    void setAdminEntrancesVisible(bool visible);
 
 private:
     Ui::MainWindow *ui;
+
+    MainWindowController *mainWindowController;
 
     User currentUser;
 

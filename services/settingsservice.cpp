@@ -12,7 +12,6 @@ namespace
  * 注意：
  * QStringLiteral() 只能用于真正的字符串字面量，
  * 不能写 QStringLiteral(SettingsOrganization)。
- * 所以这里直接把常量定义成 QString，后面直接使用。
  */
 const QString SettingsOrganization = QStringLiteral("SocialMediaAnalytics");
 const QString SettingsApplication = QStringLiteral("Settings");
@@ -30,11 +29,24 @@ QString SettingsService::exportDirectory() const
     return settings.value(ExportDirectoryKey, QString()).toString();
 }
 
-void SettingsService::saveExportDirectory(const QString& directory) const
+SettingsOperationResult SettingsService::saveExportDirectory(const QString& directory) const
 {
-    QSettings settings(SettingsOrganization, SettingsApplication);
+    QString message;
 
+    if (!validateExportDirectory(directory, message)) {
+        return {
+            false,
+            message
+        };
+    }
+
+    QSettings settings(SettingsOrganization, SettingsApplication);
     settings.setValue(ExportDirectoryKey, directory.trimmed());
+
+    return {
+        true,
+        QStringLiteral("Export settings saved successfully.")
+    };
 }
 
 QString SettingsService::defaultExportFilePath(const QString& baseFileName,
@@ -60,6 +72,49 @@ QString SettingsService::defaultExportFilePath(const QString& baseFileName,
     }
 
     return QDir(directory).filePath(defaultFileName);
+}
+
+/*
+ * 项目说明文本集中放在 SettingsService。
+ *
+ * 这样 SettingsPage 只负责显示，
+ * 后续如果要把说明内容改成从配置文件读取，也不需要改 View。
+ */
+QString SettingsService::projectDescription() const
+{
+    return QStringLiteral("Social Media Analytics Dashboard\n\n")
+    + QStringLiteral("This application is a comprehensive social media analytics platform that allows users to:\n\n")
+        + QStringLiteral("• Manage social media post data across multiple platforms (Weibo, Douyin, Bilibili, Xiaohongshu, Wechat)\n")
+        + QStringLiteral("• View real-time analytics and statistics\n")
+        + QStringLiteral("• Generate detailed reports and export data to CSV or TXT format\n")
+        + QStringLiteral("• Track engagement rates and trending content\n")
+        + QStringLiteral("• User management with role-based access control\n\n")
+        + QStringLiteral("Built with Qt 5/6 and MySQL database.\n\n")
+        + QStringLiteral("Team Members:\n")
+        + QStringLiteral("• Team Leader: 吴裕勇 (Student ID: 8002124023)\n")
+        + QStringLiteral("• Member 1: 熊倡 (Student ID: 8002124024)\n")
+        + QStringLiteral("• Member 2: 王旭坤 (Student ID: 8002124022)\n")
+        + QStringLiteral("• Member 3: 刘子懿 (Student ID: 8002124019)");
+}
+
+bool SettingsService::validateExportDirectory(const QString& directory,
+                                              QString& message) const
+{
+    const QString cleanDirectory = directory.trimmed();
+
+    if (cleanDirectory.isEmpty()) {
+        message = QStringLiteral("Please select an export directory first.");
+        return false;
+    }
+
+    const QDir dir(cleanDirectory);
+
+    if (!dir.exists()) {
+        message = QStringLiteral("The selected export directory does not exist.");
+        return false;
+    }
+
+    return true;
 }
 
 QString SettingsService::normalizedExtension(const QString& extension) const

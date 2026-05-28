@@ -44,13 +44,25 @@ void PostController::setCurrentUser(const User& user)
 void PostController::handleRefreshPosts(const QString& platform,
                                         const QString& keyword)
 {
-    const QList<Post> posts = postService.findPosts(platform, keyword);
+    /*
+     * 数据隔离关键点：
+     * 查询帖子时必须把 currentUser 传给 PostService。
+     *
+     * PostService 会判断：
+     * - admin 查询全部；
+     * - 普通 user 只查询自己的帖子。
+     */
+    const QList<Post> posts = postService.findPosts(currentUser, platform, keyword);
     view->showPosts(posts);
 }
 
 void PostController::handleAddPost(const Post& post)
 {
-    const PostOperationResult result = postService.addPost(post);
+    /*
+     * 新增帖子时把 currentUser 传给 PostService。
+     * PostService 会自动补 createdByUserId / createdByUsername。
+     */
+    const PostOperationResult result = postService.addPost(currentUser, post);
 
     if (!result.success) {
         view->showMessage(result.message, true);
@@ -83,7 +95,11 @@ void PostController::handleAddPost(const Post& post)
 
 void PostController::handleUpdatePost(const Post& post)
 {
-    const PostOperationResult result = postService.updatePost(post);
+    /*
+     * 修改帖子时把 currentUser 传给 PostService。
+     * 普通用户只能修改自己的帖子，管理员可以修改全部。
+     */
+    const PostOperationResult result = postService.updatePost(currentUser, post);
 
     if (!result.success) {
         view->showMessage(result.message, true);
@@ -119,7 +135,11 @@ void PostController::handleUpdatePost(const Post& post)
 
 void PostController::handleDeletePost(int postId)
 {
-    const PostOperationResult result = postService.deletePost(postId);
+    /*
+     * 删除帖子时把 currentUser 传给 PostService。
+     * 普通用户只能删除自己的帖子，管理员可以删除全部。
+     */
+    const PostOperationResult result = postService.deletePost(currentUser, postId);
 
     if (!result.success) {
         view->showMessage(result.message, true);
@@ -164,14 +184,19 @@ void PostController::handleLoadPost(int postId)
 
 void PostController::handleImportCsv(const QString& fileName)
 {
-    const CsvImportResult result = csvImportService.importFromFile(fileName);
+    /*
+     * CSV 导入时也必须传 currentUser。
+     * 导入的每条帖子都会归属于当前登录用户。
+     */
+    const CsvImportResult result = csvImportService.importFromFile(currentUser, fileName);
     const QString displayMessage = result.toDisplayMessage();
 
     if (!result.fileOpened) {
         writePostOperationLog(
             QStringLiteral("import_csv"),
-            QStringLiteral("CSV import failed: cannot open file. File: %1")
-                .arg(QFileInfo(fileName).fileName()),
+            QStringLiteral("CSV import failed. File: %1, Reason: %2")
+                .arg(QFileInfo(fileName).fileName(),
+                     displayMessage),
             QStringLiteral("failed")
             );
 

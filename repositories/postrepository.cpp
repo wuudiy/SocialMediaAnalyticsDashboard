@@ -1,5 +1,6 @@
 #include "postrepository.h"
-#include "databasemanager.h"
+
+#include "../infrastructure/databasemanager.h"
 
 #include <QDebug>
 #include <QSqlError>
@@ -16,20 +17,38 @@ bool PostRepository::insertPost(const Post& post)
     QSqlQuery query(DatabaseManager::database());
 
     query.prepare(
-        "INSERT INTO posts "
-        "(platform, account_name, content, publish_date, likes, comments, shares, views) "
-        "VALUES "
-        "(:platform, :account_name, :content, :publish_date, :likes, :comments, :shares, :views)"
+        QStringLiteral(
+            "INSERT INTO posts "
+            "(platform, account_name, content, publish_date, "
+            "likes, comments, shares, views, "
+            "created_by_user_id, created_by_username) "
+            "VALUES "
+            "(:platform, :account_name, :content, :publish_date, "
+            ":likes, :comments, :shares, :views, "
+            ":created_by_user_id, :created_by_username)"
+            )
         );
 
-    query.bindValue(":platform", post.platform.trimmed());
-    query.bindValue(":account_name", post.accountName.trimmed());
-    query.bindValue(":content", post.content.trimmed());
-    query.bindValue(":publish_date", post.publishDate.toString(Qt::ISODate));
-    query.bindValue(":likes", post.likes);
-    query.bindValue(":comments", post.comments);
-    query.bindValue(":shares", post.shares);
-    query.bindValue(":views", post.views);
+    query.bindValue(QStringLiteral(":platform"), post.platform.trimmed());
+    query.bindValue(QStringLiteral(":account_name"), post.accountName.trimmed());
+    query.bindValue(QStringLiteral(":content"), post.content.trimmed());
+    query.bindValue(QStringLiteral(":publish_date"), post.publishDate.toString(Qt::ISODate));
+    query.bindValue(QStringLiteral(":likes"), post.likes);
+    query.bindValue(QStringLiteral(":comments"), post.comments);
+    query.bindValue(QStringLiteral(":shares"), post.shares);
+    query.bindValue(QStringLiteral(":views"), post.views);
+
+    /*
+     * createdByUserId <= 0 时写 NULL。
+     * 正常新增和 CSV 导入都会由 PostService 自动补当前用户 ID。
+     */
+    if (post.createdByUserId > 0) {
+        query.bindValue(QStringLiteral(":created_by_user_id"), post.createdByUserId);
+    } else {
+        query.bindValue(QStringLiteral(":created_by_user_id"), QVariant());
+    }
+
+    query.bindValue(QStringLiteral(":created_by_username"), post.createdByUsername.trimmed());
 
     if (!query.exec()) {
         qDebug() << "Insert post failed:" << query.lastError().text();
@@ -48,28 +67,34 @@ bool PostRepository::updatePost(const Post& post)
 
     QSqlQuery query(DatabaseManager::database());
 
+    /*
+     * 修改帖子内容时不修改创建人。
+     * 帖子归属只在新增 / 导入时确定。
+     */
     query.prepare(
-        "UPDATE posts SET "
-        "platform = :platform, "
-        "account_name = :account_name, "
-        "content = :content, "
-        "publish_date = :publish_date, "
-        "likes = :likes, "
-        "comments = :comments, "
-        "shares = :shares, "
-        "views = :views "
-        "WHERE post_id = :post_id"
+        QStringLiteral(
+            "UPDATE posts SET "
+            "platform = :platform, "
+            "account_name = :account_name, "
+            "content = :content, "
+            "publish_date = :publish_date, "
+            "likes = :likes, "
+            "comments = :comments, "
+            "shares = :shares, "
+            "views = :views "
+            "WHERE post_id = :post_id"
+            )
         );
 
-    query.bindValue(":platform", post.platform.trimmed());
-    query.bindValue(":account_name", post.accountName.trimmed());
-    query.bindValue(":content", post.content.trimmed());
-    query.bindValue(":publish_date", post.publishDate.toString(Qt::ISODate));
-    query.bindValue(":likes", post.likes);
-    query.bindValue(":comments", post.comments);
-    query.bindValue(":shares", post.shares);
-    query.bindValue(":views", post.views);
-    query.bindValue(":post_id", post.postId);
+    query.bindValue(QStringLiteral(":platform"), post.platform.trimmed());
+    query.bindValue(QStringLiteral(":account_name"), post.accountName.trimmed());
+    query.bindValue(QStringLiteral(":content"), post.content.trimmed());
+    query.bindValue(QStringLiteral(":publish_date"), post.publishDate.toString(Qt::ISODate));
+    query.bindValue(QStringLiteral(":likes"), post.likes);
+    query.bindValue(QStringLiteral(":comments"), post.comments);
+    query.bindValue(QStringLiteral(":shares"), post.shares);
+    query.bindValue(QStringLiteral(":views"), post.views);
+    query.bindValue(QStringLiteral(":post_id"), post.postId);
 
     if (!query.exec()) {
         qDebug() << "Update post failed:" << query.lastError().text();
@@ -84,11 +109,13 @@ bool PostRepository::deletePostById(int postId)
     QSqlQuery query(DatabaseManager::database());
 
     query.prepare(
-        "DELETE FROM posts "
-        "WHERE post_id = :post_id"
+        QStringLiteral(
+            "DELETE FROM posts "
+            "WHERE post_id = :post_id"
+            )
         );
 
-    query.bindValue(":post_id", postId);
+    query.bindValue(QStringLiteral(":post_id"), postId);
 
     if (!query.exec()) {
         qDebug() << "Delete post failed:" << query.lastError().text();
@@ -109,14 +136,17 @@ Post PostRepository::findPostById(int postId)
     QSqlQuery query(DatabaseManager::database());
 
     query.prepare(
-        "SELECT post_id, platform, account_name, content, publish_date, "
-        "likes, comments, shares, views "
-        "FROM posts "
-        "WHERE post_id = :post_id "
-        "LIMIT 1"
+        QStringLiteral(
+            "SELECT post_id, platform, account_name, content, publish_date, "
+            "likes, comments, shares, views, "
+            "created_by_user_id, created_by_username "
+            "FROM posts "
+            "WHERE post_id = :post_id "
+            "LIMIT 1"
+            )
         );
 
-    query.bindValue(":post_id", postId);
+    query.bindValue(QStringLiteral(":post_id"), postId);
 
     if (!query.exec()) {
         qDebug() << "Find post by id failed:" << query.lastError().text();
@@ -130,23 +160,35 @@ Post PostRepository::findPostById(int postId)
     return post;
 }
 
-QList<Post> PostRepository::findPosts(const QString& platform,
-                                      const QString& keyword)
+QList<Post> PostRepository::findPosts(const PostQueryFilter& filter)
 {
     QList<Post> posts;
 
     QString sql =
         "SELECT post_id, platform, account_name, content, publish_date, "
-        "likes, comments, shares, views "
+        "likes, comments, shares, views, "
+        "created_by_user_id, created_by_username "
         "FROM posts "
         "WHERE 1 = 1 ";
 
-    if (!platform.trimmed().isEmpty()) {
+    const QString cleanPlatform = filter.platform.trimmed();
+    const QString cleanKeyword = filter.keyword.trimmed();
+
+    if (!cleanPlatform.isEmpty()) {
         sql += "AND platform = :platform ";
     }
 
-    if (!keyword.trimmed().isEmpty()) {
+    if (!cleanKeyword.isEmpty()) {
         sql += "AND (content LIKE :keyword OR account_name LIKE :keyword) ";
+    }
+
+    /*
+     * 用户级数据隔离核心条件：
+     * - admin：includeAllUsers = true，不加用户过滤；
+     * - 普通 user：includeAllUsers = false，只查自己的数据。
+     */
+    if (!filter.includeAllUsers) {
+        sql += "AND created_by_user_id = :owner_user_id ";
     }
 
     sql += "ORDER BY publish_date DESC, post_id DESC";
@@ -154,12 +196,17 @@ QList<Post> PostRepository::findPosts(const QString& platform,
     QSqlQuery query(DatabaseManager::database());
     query.prepare(sql);
 
-    if (!platform.trimmed().isEmpty()) {
-        query.bindValue(":platform", platform.trimmed());
+    if (!cleanPlatform.isEmpty()) {
+        query.bindValue(QStringLiteral(":platform"), cleanPlatform);
     }
 
-    if (!keyword.trimmed().isEmpty()) {
-        query.bindValue(":keyword", QStringLiteral("%%1%").arg(keyword.trimmed()));
+    if (!cleanKeyword.isEmpty()) {
+        query.bindValue(QStringLiteral(":keyword"),
+                        QStringLiteral("%%1%").arg(cleanKeyword));
+    }
+
+    if (!filter.includeAllUsers) {
+        query.bindValue(QStringLiteral(":owner_user_id"), filter.ownerUserId);
     }
 
     if (!query.exec()) {
@@ -174,6 +221,17 @@ QList<Post> PostRepository::findPosts(const QString& platform,
     return posts;
 }
 
+QList<Post> PostRepository::findPosts(const QString& platform,
+                                      const QString& keyword)
+{
+    PostQueryFilter filter;
+    filter.platform = platform;
+    filter.keyword = keyword;
+    filter.includeAllUsers = true;
+
+    return findPosts(filter);
+}
+
 QList<Post> PostRepository::findRecentPosts(int limit)
 {
     QList<Post> posts;
@@ -182,7 +240,8 @@ QList<Post> PostRepository::findRecentPosts(int limit)
 
     const QString sql = QStringLiteral(
                             "SELECT post_id, platform, account_name, content, publish_date, "
-                            "likes, comments, shares, views "
+                            "likes, comments, shares, views, "
+                            "created_by_user_id, created_by_username "
                             "FROM posts "
                             "ORDER BY publish_date DESC, post_id DESC "
                             "LIMIT %1"
@@ -213,6 +272,12 @@ Post PostRepository::buildPostFromQuery(const QSqlQuery& query) const
     post.comments = query.value(6).toInt();
     post.shares = query.value(7).toInt();
     post.views = query.value(8).toInt();
+
+    post.createdByUserId = query.value(9).isNull()
+                               ? -1
+                               : query.value(9).toInt();
+
+    post.createdByUsername = query.value(10).toString();
 
     return post;
 }

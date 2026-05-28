@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 
+#include "../controllers/mainwindowcontroller.h"
 #include "../styles/appstyle.h"
 
 #include "analyticspage.h"
@@ -11,20 +12,18 @@
 #include "settingspage.h"
 #include "usermanagementpage.h"
 
-#include <QApplication>
 #include <QFrame>
-#include <QLabel>
 #include <QList>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QStatusBar>
 #include <QStyle>
-#include <QVBoxLayout>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent),
     ui(new Ui::MainWindow),
+    mainWindowController(nullptr),
     dashboardPage(nullptr),
     postManagementPage(nullptr),
     analyticsPage(nullptr),
@@ -47,7 +46,11 @@ MainWindow::MainWindow(QWidget *parent)
     connectSignals();
     applyStyleSheet();
 
-    showDashboardPage();
+    /*
+     * Controller 在页面和信号都准备好后创建。
+     * 后续按钮点击、登录用户设置、退出请求都交给 Controller 处理。
+     */
+    mainWindowController = new MainWindowController(this, this);
 }
 
 MainWindow::~MainWindow()
@@ -85,6 +88,12 @@ void MainWindow::prepareUiObjects()
 
     ui->pageTitleLabel->setText(QStringLiteral("Dashboard"));
     ui->userInfoLabel->setText(QStringLiteral("Not logged in"));
+
+    /*
+     * 登录前先隐藏管理员入口。
+     * 登录成功后由 MainWindowController 根据当前用户角色决定是否显示。
+     */
+    setAdminEntrancesVisible(false);
 }
 
 /*
@@ -119,6 +128,10 @@ void MainWindow::setupPages()
 
 /*
  * 集中连接主窗口按钮的信号槽。
+ *
+ * 注意：
+ * 这些槽函数现在只发出导航请求，
+ * 是否允许打开页面由 MainWindowController 判断。
  */
 void MainWindow::connectSignals()
 {
@@ -156,72 +169,50 @@ void MainWindow::applyStyleSheet()
 }
 
 /*
- * 设置当前登录用户，并同步给需要用户信息的子页面。
+ * LoginView 登录成功后调用。
+ *
+ * 当前函数只负责把用户变化通知给 Controller，
+ * 不再直接判断权限或生成用户信息文本。
  */
 void MainWindow::setCurrentUser(const User& user)
 {
-    currentUser = user;
-
-    setWindowTitle(
-        QStringLiteral("Social Media Analytics Dashboard - %1")
-            .arg(currentUser.username)
-        );
-
-    ui->userInfoLabel->setText(
-        QStringLiteral("%1  |  %2")
-            .arg(currentUser.username, currentUser.role.toUpper())
-        );
-
-    dashboardPage->setCurrentUser(currentUser);
-    postManagementPage->setCurrentUser(currentUser);
-    exportPage->setCurrentUser(currentUser);
-    userManagementPage->setCurrentUser(currentUser);
-
-    updateRoleAccess();
-    showDashboardPage();
-
-    statusBar()->showMessage(
-        QStringLiteral("Logged in as %1").arg(currentUser.role),
-        3000
-        );
+    emit currentUserChanged(user);
 }
 
 /*
- * 创建占位页。
- * 当前保留此函数，后续新增页面时仍可复用。
+ * Controller 调用：应用当前登录用户状态。
+ *
+ * 这里仍然负责把用户信息同步给子页面，
+ * 因为子页面对象由 MainWindow 创建和持有。
  */
-QWidget* MainWindow::createPlaceholderPage(const QString& title,
-                                           const QString& description)
+void MainWindow::applyCurrentUserState(const User& user,
+                                       const QString& windowTitle,
+                                       const QString& userInfoText,
+                                       bool canUseAdminPages)
 {
-    auto *page = new QWidget();
+    currentUser = user;
 
-    auto *layout = new QVBoxLayout(page);
-    layout->setContentsMargins(24, 22, 24, 24);
+    setWindowTitle(windowTitle);
+    ui->userInfoLabel->setText(userInfoText);
 
-    auto *card = new QFrame();
-    card->setObjectName(QStringLiteral("placeholderCard"));
-    card->setMinimumHeight(220);
+    /*
+     * 当前用户需要同步给所有涉及数据权限的页面。
+     *
+     * - Dashboard：下一批会做数据隔离，先保留；
+     * - PostManagement：已经按当前用户过滤帖子；
+     * - Analytics：本批新增按当前用户过滤统计；
+     * - Export：本批新增按当前用户过滤导出；
+     * - UserManagement：管理员业务需要当前用户。
+     */
+    dashboardPage->setCurrentUser(currentUser);
+    postManagementPage->setCurrentUser(currentUser);
+    analyticsPage->setCurrentUser(currentUser);
+    exportPage->setCurrentUser(currentUser);
+    userManagementPage->setCurrentUser(currentUser);
 
-    auto *cardLayout = new QVBoxLayout(card);
-    cardLayout->setContentsMargins(24, 24, 24, 24);
-    cardLayout->setSpacing(12);
-
-    auto *titleLabel = new QLabel(title);
-    titleLabel->setObjectName(QStringLiteral("placeholderTitle"));
-
-    auto *textLabel = new QLabel(description);
-    textLabel->setObjectName(QStringLiteral("placeholderText"));
-    textLabel->setWordWrap(true);
-
-    cardLayout->addWidget(titleLabel);
-    cardLayout->addWidget(textLabel);
-    cardLayout->addStretch();
-
-    layout->addWidget(card);
-    layout->addStretch();
-
-    return page;
+    setAdminEntrancesVisible(canUseAdminPages);
 }
+
 
 /*
  * 给页面套一层 QScrollArea。
@@ -277,115 +268,94 @@ QWidget* MainWindow::pageContainer(QWidget *page) const
 }
 
 /*
- * 切换到 Dashboard 页面。
+ * 导航按钮槽函数。
+ *
+ * 每个函数只发出页面请求，不做权限判断。
  */
 void MainWindow::showDashboardPage()
 {
-    dashboardPage->refreshDashboard();
-
-    navigateTo(
-        dashboardPage,
-        QStringLiteral("Dashboard"),
-        ui->dashboardButton
-        );
+    emit navigationRequested(MainWindowPage::Dashboard);
 }
 
-/*
- * 切换到帖子数据管理页面。
- */
 void MainWindow::showPostManagementPage()
 {
-    postManagementPage->refreshPosts();
-
-    navigateTo(
-        postManagementPage,
-        QStringLiteral("Post Data"),
-        ui->postManagementButton
-        );
+    emit navigationRequested(MainWindowPage::PostManagement);
 }
 
-/*
- * 切换到 Analytics 页面。
- */
 void MainWindow::showAnalyticsPage()
 {
-    analyticsPage->refreshData();
-
-    navigateTo(
-        analyticsPage,
-        QStringLiteral("Analytics"),
-        ui->analyticsButton
-        );
+    emit navigationRequested(MainWindowPage::Analytics);
 }
 
-/*
- * 切换到报表导出页面。
- */
 void MainWindow::showExportPage()
 {
-    navigateTo(
-        exportPage,
-        QStringLiteral("Export Reports"),
-        ui->exportButton
-        );
+    emit navigationRequested(MainWindowPage::Export);
 }
 
-/*
- * 切换到用户管理页面。
- */
 void MainWindow::showUserManagementPage()
 {
-    if (!isAdminUser()) {
-        QMessageBox::warning(
-            this,
-            QStringLiteral("Access Denied"),
-            QStringLiteral("Only admin users can open User Management.")
-            );
-
-        return;
-    }
-
-    navigateTo(
-        userManagementPage,
-        QStringLiteral("User Management"),
-        ui->userManagementButton
-        );
+    emit navigationRequested(MainWindowPage::UserManagement);
 }
 
-/*
- * 切换到系统日志页面。
- */
 void MainWindow::showLogPage()
 {
-    if (!isAdminUser()) {
-        QMessageBox::warning(
-            this,
-            QStringLiteral("Access Denied"),
-            QStringLiteral("Only admin users can open Operation Logs.")
-            );
+    emit navigationRequested(MainWindowPage::OperationLogs);
+}
 
-        return;
-    }
+void MainWindow::showSettingsPage()
+{
+    emit navigationRequested(MainWindowPage::Settings);
+}
 
-    logPage->refreshLogs();
-
-    navigateTo(
-        logPage,
-        QStringLiteral("Operation Logs"),
-        ui->operationLogsButton
-        );
+void MainWindow::exitApplication()
+{
+    emit logoutRequested();
 }
 
 /*
- * 切换到 Settings 页面。
+ * Controller 调用：显示某个页面。
+ *
+ * 页面刷新仍放在 View 中执行，
+ * 因为具体哪个页面需要调用哪个 refresh 函数，
+ * 属于 MainWindow 和子页面对象之间的界面协作。
  */
-void MainWindow::showSettingsPage()
+void MainWindow::navigateToPage(MainWindowPage page,
+                                const QString& title)
 {
-    navigateTo(
-        settingsPage,
-        QStringLiteral("Settings"),
-        ui->settingsButton
-        );
+    switch (page) {
+    case MainWindowPage::Dashboard:
+        dashboardPage->refreshDashboard();
+        navigateTo(dashboardPage, title, ui->dashboardButton);
+        return;
+
+    case MainWindowPage::PostManagement:
+        postManagementPage->refreshPosts();
+        navigateTo(postManagementPage, title, ui->postManagementButton);
+        return;
+
+    case MainWindowPage::Analytics:
+        analyticsPage->refreshData();
+        navigateTo(analyticsPage, title, ui->analyticsButton);
+        return;
+
+    case MainWindowPage::Export:
+        navigateTo(exportPage, title, ui->exportButton);
+        return;
+
+    case MainWindowPage::UserManagement:
+        navigateTo(userManagementPage, title, ui->userManagementButton);
+        return;
+
+    case MainWindowPage::OperationLogs:
+        logPage->refreshLogs();
+        navigateTo(logPage, title, ui->operationLogsButton);
+        return;
+
+    case MainWindowPage::Settings:
+        settingsPage->refreshSettings();
+        navigateTo(settingsPage, title, ui->settingsButton);
+        return;
+    }
 }
 
 /*
@@ -408,22 +378,6 @@ void MainWindow::navigateTo(QWidget *page,
     ui->pageStack->setCurrentWidget(container);
     ui->pageTitleLabel->setText(title);
     setActiveNavButton(activeButton);
-}
-
-/*
- * 退出程序前二次确认，避免误点。
- */
-void MainWindow::exitApplication()
-{
-    const QMessageBox::StandardButton answer = QMessageBox::question(
-        this,
-        QStringLiteral("Logout"),
-        QStringLiteral("Do you want to exit the application?")
-        );
-
-    if (answer == QMessageBox::Yes) {
-        qApp->quit();
-    }
 }
 
 /*
@@ -461,26 +415,41 @@ void MainWindow::setActiveNavButton(QPushButton *activeButton)
 }
 
 /*
- * 根据当前用户角色刷新管理员入口。
+ * 显示或隐藏管理员入口。
+ *
+ * 具体权限由 Controller 判断，
+ * View 只负责把按钮隐藏或显示。
  */
-void MainWindow::updateRoleAccess()
+void MainWindow::setAdminEntrancesVisible(bool visible)
 {
-    const bool canUseAdminPages = isAdminUser();
+    ui->userManagementButton->setVisible(visible);
+    ui->operationLogsButton->setVisible(visible);
+}
 
-    ui->userManagementButton->setVisible(canUseAdminPages);
-    ui->operationLogsButton->setVisible(canUseAdminPages);
+void MainWindow::showAccessDeniedMessage(const QString& title,
+                                         const QString& message)
+{
+    QMessageBox::warning(this, title, message);
+}
 
-    if (!canUseAdminPages
-        && (ui->pageStack->currentWidget() == userManagementContainer
-            || ui->pageStack->currentWidget() == logContainer)) {
-        showDashboardPage();
-    }
+void MainWindow::showStatusMessage(const QString& message,
+                                   int timeoutMs)
+{
+    statusBar()->showMessage(message, timeoutMs);
 }
 
 /*
- * 管理员判断统一收口。
+ * 退出程序前二次确认，避免误点。
+ *
+ * 弹窗属于界面交互，保留在 View 层。
  */
-bool MainWindow::isAdminUser() const
+bool MainWindow::confirmExitApplication()
 {
-    return currentUser.isValid() && currentUser.isAdmin();
+    const QMessageBox::StandardButton answer = QMessageBox::question(
+        this,
+        QStringLiteral("Logout"),
+        QStringLiteral("Do you want to exit the application?")
+        );
+
+    return answer == QMessageBox::Yes;
 }

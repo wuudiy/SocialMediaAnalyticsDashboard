@@ -2,20 +2,24 @@
 #define LOGSERVICE_H
 
 #include "../models/operationlog.h"
+#include "../repositories/logrepository.h"
 
 #include <QDateTime>
 #include <QList>
 #include <QString>
 
-class QSqlQuery;
-
 /*
  * 系统日志服务。
  *
  * 负责：
+ * - 标准化日志字段；
  * - 写入用户关键操作日志；
- * - 查询操作日志；
- * - 给管理员日志页面提供数据。
+ * - 写入系统日志；
+ * - 对外提供日志查询接口。
+ *
+ * 注意：
+ * SQL 已经迁移到 LogRepository，
+ * LogService 不再直接访问 DatabaseManager / QSqlQuery。
  */
 class LogService
 {
@@ -32,13 +36,13 @@ public:
                         const QString& detail,
                         const QString& result = QStringLiteral("success"));
 
+    QList<OperationLog> findLogs(const OperationLogFilter& filter);
+
     /*
-     * 查询操作日志。
+     * 兼容旧调用方式。
      *
-     * usernameKeyword 为空：不按用户名过滤。
-     * action 为空：不按操作类型过滤。
-     * startTime 无效：不限制开始时间。
-     * endTime 无效：不限制结束时间。
+     * 其他模块暂时如果还按旧参数调用 findLogs，
+     * 不需要马上联动修改。
      */
     QList<OperationLog> findLogs(const QString& usernameKeyword = QString(),
                                  const QString& action = QString(),
@@ -47,7 +51,7 @@ public:
                                  int limit = 200);
 
 private:
-    OperationLog buildLogFromQuery(const QSqlQuery& query) const;
+    LogRepository logRepository;
 };
 
 #endif // LOGSERVICE_H

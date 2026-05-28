@@ -1,6 +1,7 @@
 #include "analyticsservice.h"
-#include "databasemanager.h"
-#include "postrepository.h"
+
+#include "../infrastructure/databasemanager.h"
+#include "../repositories/postrepository.h"
 
 #include <QDebug>
 #include <QSqlError>
@@ -29,12 +30,23 @@ bool hasEndDateFilter(const AnalyticsFilter& filter)
     return filter.endDate.isValid();
 }
 
+bool hasOwnerFilter(const AnalyticsFilter& filter)
+{
+    /*
+     * 数据隔离核心判断：
+     * - 管理员 includeAllUsers = true，不追加 created_by_user_id 条件；
+     * - 普通用户 includeAllUsers = false，只查询 ownerUserId 对应数据。
+     */
+    return !filter.includeAllUsers;
+}
+
 /*
  * 统一追加 posts 表筛选条件。
  *
  * 必须先 appendPostFilters(sql, filter)，再 query.prepare(sql)。
  */
-void appendPostFilters(QString& sql, const AnalyticsFilter& filter)
+void appendPostFilters(QString& sql,
+                       const AnalyticsFilter& filter)
 {
     sql += QStringLiteral("WHERE 1 = 1 ");
 
@@ -49,12 +61,17 @@ void appendPostFilters(QString& sql, const AnalyticsFilter& filter)
     if (hasEndDateFilter(filter)) {
         sql += QStringLiteral("AND publish_date <= :end_date ");
     }
+
+    if (hasOwnerFilter(filter)) {
+        sql += QStringLiteral("AND created_by_user_id = :owner_user_id ");
+    }
 }
 
 /*
  * 统一绑定筛选参数。
  */
-void bindPostFilters(QSqlQuery& query, const AnalyticsFilter& filter)
+void bindPostFilters(QSqlQuery& query,
+                     const AnalyticsFilter& filter)
 {
     if (hasPlatformFilter(filter)) {
         query.bindValue(QStringLiteral(":platform"), normalizedPlatform(filter));
@@ -69,12 +86,17 @@ void bindPostFilters(QSqlQuery& query, const AnalyticsFilter& filter)
         query.bindValue(QStringLiteral(":end_date"),
                         filter.endDate.toString(Qt::ISODate));
     }
+
+    if (hasOwnerFilter(filter)) {
+        query.bindValue(QStringLiteral(":owner_user_id"), filter.ownerUserId);
+    }
 }
 
 /*
  * SELECT 字段顺序必须是：
  * post_id, platform, account_name, content, publish_date,
- * likes, comments, shares, views
+ * likes, comments, shares, views,
+ * created_by_user_id, created_by_username
  */
 Post buildPostFromQuery(const QSqlQuery& query)
 {
@@ -89,6 +111,12 @@ Post buildPostFromQuery(const QSqlQuery& query)
     post.comments = query.value(6).toInt();
     post.shares = query.value(7).toInt();
     post.views = query.value(8).toInt();
+
+    post.createdByUserId = query.value(9).isNull()
+                               ? -1
+                               : query.value(9).toInt();
+
+    post.createdByUsername = query.value(10).toString();
 
     return post;
 }
@@ -177,6 +205,13 @@ DashboardSummary AnalyticsService::loadDashboardSummary(const AnalyticsFilter& f
     return summary;
 }
 
+/*
+ * 兼容旧调用。
+ *
+ * 注意：
+ * 当前函数仍然默认查全局最近帖子。
+ * Dashboard 的完整数据隔离会在下一批单独处理。
+ */
 QList<Post> AnalyticsService::loadRecentPosts(int limit)
 {
     PostRepository repository;
@@ -195,8 +230,6 @@ AnalyticsReport AnalyticsService::generateReport(const AnalyticsFilter& filter)
     return report;
 }
 
-// 兼容 ExportPage 的旧调用方式。
-// ExportPage 只传平台字符串，这里转成统一的 AnalyticsFilter。
 QList<PlatformStatistics> AnalyticsService::getPlatformStatistics(const QString& platform)
 {
     AnalyticsFilter filter;
@@ -315,14 +348,16 @@ QList<DateTrend> AnalyticsService::getDateTrends(const AnalyticsFilter& filter)
     return trends;
 }
 
-QList<Post> AnalyticsService::getTopPosts(int limit, const AnalyticsFilter& filter)
+QList<Post> AnalyticsService::getTopPosts(int limit,
+                                          const AnalyticsFilter& filter)
 {
     QList<Post> posts;
 
     QString sql = QStringLiteral(
         "SELECT "
         "post_id, platform, account_name, content, publish_date, "
-        "likes, comments, shares, views "
+        "likes, comments, shares, views, "
+        "created_by_user_id, created_by_username "
         "FROM posts "
         );
 
@@ -356,7 +391,8 @@ QList<Post> AnalyticsService::getPostsForExport(const AnalyticsFilter& filter)
     QString sql = QStringLiteral(
         "SELECT "
         "post_id, platform, account_name, content, publish_date, "
-        "likes, comments, shares, views "
+        "likes, comments, shares, views, "
+        "created_by_user_id, created_by_username "
         "FROM posts "
         );
 

@@ -2,7 +2,7 @@
 #define EXPORTSERVICE_H
 
 #include "../models/exportmodels.h"
-#include "../services/analyticsservice.h"
+#include "analyticsservice.h"
 
 #include <QString>
 
@@ -14,11 +14,10 @@
  * - 根据筛选条件生成 CSV 报表；
  * - 写入本地文件。
  *
- * 不负责：
- * - QFileDialog；
- * - QMessageBox；
- * - 当前登录用户；
- * - 操作日志。
+ * 数据隔离说明：
+ * ExportService 不直接判断 admin / user。
+ * Controller 会把当前用户权限写入 ExportRequest::filter，
+ * ExportService 只按 filter 生成报表。
  */
 class ExportService
 {

@@ -26,29 +26,38 @@ void ExportController::setCurrentUser(const User& user)
 
 void ExportController::handleExportReport(const ExportRequest& request)
 {
+    /*
+     * 数据隔离关键点：
+     * View 传来的 request 只有平台和日期筛选；
+     * 当前用户权限必须由 Controller 补充，不能让 View 判断。
+     */
+    ExportRequest permissionRequest = request;
+    permissionRequest.filter.includeAllUsers = currentUser.isValid() && currentUser.isAdmin();
+    permissionRequest.filter.ownerUserId = currentUser.isValid() ? currentUser.userId : -1;
+
     QString message;
 
-    if (!exportService.validateRequest(request, message)) {
+    if (!exportService.validateRequest(permissionRequest, message)) {
         view->showStatus(message, false);
         view->showWarningMessage(QStringLiteral("Export Failed"), message);
 
-        writeExportLog(request,
+        writeExportLog(permissionRequest,
                        QString(),
                        QStringLiteral("failed"),
                        message);
         return;
     }
 
-    const QString content = exportService.generateReport(request);
+    const QString content = exportService.generateReport(permissionRequest);
 
     /*
      * 预览先显示出来，即使用户后面取消保存，也能看到当前报表内容。
      */
     view->showPreview(content);
 
-    const QString extension = ExportService::extensionForFormat(request.format);
+    const QString extension = ExportService::extensionForFormat(permissionRequest.format);
     const QString suggestedPath = settingsService.defaultExportFilePath(
-        request.baseFileName,
+        permissionRequest.baseFileName,
         extension
         );
 
@@ -61,7 +70,7 @@ void ExportController::handleExportReport(const ExportRequest& request)
         message = QStringLiteral("Export cancelled.");
         view->showStatus(message, false);
 
-        writeExportLog(request,
+        writeExportLog(permissionRequest,
                        QString(),
                        QStringLiteral("failed"),
                        message);
@@ -77,7 +86,7 @@ void ExportController::handleExportReport(const ExportRequest& request)
         view->showStatus(saveResult.message, false);
         view->showWarningMessage(QStringLiteral("Export Failed"), saveResult.message);
 
-        writeExportLog(request,
+        writeExportLog(permissionRequest,
                        filePath,
                        QStringLiteral("failed"),
                        saveResult.message);
@@ -86,11 +95,11 @@ void ExportController::handleExportReport(const ExportRequest& request)
 
     view->showStatus(
         QStringLiteral("%1 report exported successfully!")
-            .arg(ExportService::displayNameForFormat(request.format)),
+            .arg(ExportService::displayNameForFormat(permissionRequest.format)),
         true
         );
 
-    writeExportLog(request,
+    writeExportLog(permissionRequest,
                    saveResult.filePath,
                    QStringLiteral("success"),
                    saveResult.message);
@@ -107,9 +116,14 @@ void ExportController::writeExportLog(const ExportRequest& request,
                                  ? QStringLiteral("All")
                                  : request.filter.platform.trimmed();
 
-    const QString detail = QStringLiteral("Format: %1, Platform: %2, Date Range: %3 to %4, File: %5, Message: %6")
+    const QString scope = request.filter.includeAllUsers
+                              ? QStringLiteral("All Users")
+                              : QStringLiteral("Current User Only");
+
+    const QString detail = QStringLiteral("Format: %1, Platform: %2, Scope: %3, Date Range: %4 to %5, File: %6, Message: %7")
                                .arg(formatName,
                                     platform,
+                                    scope,
                                     request.filter.startDate.toString(QStringLiteral("yyyy-MM-dd")),
                                     request.filter.endDate.toString(QStringLiteral("yyyy-MM-dd")),
                                     QFileInfo(filePath).fileName(),

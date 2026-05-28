@@ -2,24 +2,28 @@
 #define AUTHCONTROLLER_H
 
 #include "../models/user.h"
-#include "../repositories/userrepository.h"
-#include "../services/logservice.h"
+#include "../services/authservice.h"
 
 #include <QString>
 
 /*
- * 登录注册业务控制器。
+ * 登录认证控制器。
  *
- * 负责：
- * - 登录流程；
- * - 注册流程；
- * - 输入校验；
- * - 当前登录用户状态维护。
+ * MVC 重构后，本类只负责 Controller 层：
+ * - 给 LoginView 提供 loginUser()；
+ * - 保存当前登录用户状态；
+ * - 对外返回当前用户和角色。
  *
- * 不负责：
- * - 直接写 SQL；
- * - 创建界面控件；
- * - 管理数据库连接。
+ * 不再负责：
+ * - 登录输入校验；
+ * - 密码 SHA-256 校验；
+ * - 旧 DES 密码升级；
+ * - 用户注册；
+ * - 写登录日志；
+ * - 直接调用 UserRepository。
+ *
+ * 用户创建已经统一迁移到：
+ * UserController -> UserService
  */
 class AuthController
 {
@@ -31,42 +35,14 @@ public:
                    const QString& password,
                    QString& message);
 
-    // 管理员创建新用户，operatorUser 是当前操作人。
-    bool registerUser(const User& operatorUser,
-                      const QString& username,
-                      const QString& password,
-                      const QString& role,
-                      QString& message);
-
-    // 返回当前登录用户角色。
+    // 返回当前用户角色。
     QString getCurrentUserRole() const;
 
     // 返回当前登录用户完整信息。
     User getCurrentUser() const;
 
 private:
-    // 登录输入校验。
-    bool validateLoginInput(const QString& username,
-                            const QString& password,
-                            QString& message) const;
-
-    // 注册输入校验。
-    bool validateRegisterInput(const QString& username,
-                               const QString& password,
-                               const QString& role,
-                               QString& message) const;
-
-    // 创建用户权限判断。
-    bool canCreateUser(const User& operatorUser) const;
-
-    // 校验密码。新密码走 SHA-256，旧 DES 密码登录成功后自动升级。
-    bool verifyPasswordAndUpgradeIfNeeded(const User& userFromDatabase,
-                                          const QString& password);
-
-private:
-    UserRepository userRepository;
-
-    LogService logService;
+    AuthService authService;
 
     User currentUser;
 };

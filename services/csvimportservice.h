@@ -4,6 +4,7 @@
 #include "postservice.h"
 
 #include "../models/post.h"
+#include "../models/user.h"
 
 #include <QDate>
 #include <QString>
@@ -60,19 +61,17 @@ struct CsvImportResult
  * - 构造 Post；
  * - 调用 PostService 保存数据。
  *
- * 不负责：
- * - QFileDialog；
- * - QMessageBox；
- * - 表格刷新；
- * - 当前登录用户；
- * - 操作日志。
+ * 数据隔离改造后：
+ * - CSV 导入的数据会自动归属于当前登录用户；
+ * - Service 不关心页面，也不写日志。
  */
 class CsvImportService
 {
 public:
     CsvImportService();
 
-    CsvImportResult importFromFile(const QString& fileName);
+    CsvImportResult importFromFile(const User& currentUser,
+                                   const QString& fileName);
 
 private:
     enum class CsvFormat

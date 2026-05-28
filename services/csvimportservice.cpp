@@ -13,9 +13,16 @@ CsvImportService::CsvImportService()
 {
 }
 
-CsvImportResult CsvImportService::importFromFile(const QString& fileName)
+CsvImportResult CsvImportService::importFromFile(const User& currentUser,
+                                                 const QString& fileName)
 {
     CsvImportResult result;
+
+    if (!currentUser.isValid()) {
+        result.fileOpened = false;
+        result.errorMessage = QStringLiteral("Please login before importing CSV.");
+        return result;
+    }
 
     QFile file(fileName);
 
@@ -91,7 +98,12 @@ CsvImportResult CsvImportService::importFromFile(const QString& fileName)
             continue;
         }
 
-        const PostOperationResult saveResult = postService.addPost(post);
+        /*
+         * 数据隔离关键点：
+         * 导入的每条帖子都通过 PostService::addPost(currentUser, post) 保存，
+         * PostService 会自动给帖子补 createdByUserId / createdByUsername。
+         */
+        const PostOperationResult saveResult = postService.addPost(currentUser, post);
 
         if (!saveResult.success) {
             ++result.failedCount;

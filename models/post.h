@@ -5,36 +5,44 @@
 #include <QString>
 
 /*
- * 社交媒体帖子数据模型。
+ * 社交媒体帖子模型。
  *
- * 这个类只保存一条帖子的基础数据。
- * 它不负责操作数据库，也不负责页面显示。
+ * 数据隔离改造后，每条帖子都记录创建者：
+ * - createdByUserId：创建 / 导入这条帖子数据的用户 ID；
+ * - createdByUsername：创建 / 导入这条帖子数据的用户名。
+ *
+ * 权限规则：
+ * - admin 可以查看全部帖子；
+ * - 普通 user 只能查看 createdByUserId 等于自己 userId 的帖子；
+ * - 旧数据 createdByUserId 为 -1，只给 admin 查看。
  */
 class Post
 {
 public:
     Post();
 
-    // postId 为 -1，说明这条数据还没有保存到数据库。
+    // postId 大于 0 表示这是一条数据库中真实存在的帖子。
     bool isValid() const;
 
-    // 点赞、评论、转发加起来就是互动量。
+    // 互动量 = 点赞 + 评论 + 分享。
     int interactionCount() const;
 
     // 互动率 = 互动量 / 浏览量。
-    // 浏览量为 0 时直接返回 0，避免除 0。
     double engagementRate() const;
 
 public:
-    int postId;              // 帖子 ID，对应 posts.post_id
-    QString platform;        // 平台名称，例如 Weibo、Douyin、Bilibili
-    QString accountName;     // 账号名称
-    QString content;         // 帖子标题或内容摘要
-    QDate publishDate;       // 发布时间
-    int likes;               // 点赞数
-    int comments;            // 评论数
-    int shares;              // 转发数
-    int views;               // 浏览量 / 曝光量
+    int postId;
+    QString platform;
+    QString accountName;
+    QString content;
+    QDate publishDate;
+    int likes;
+    int comments;
+    int shares;
+    int views;
+
+    int createdByUserId;
+    QString createdByUsername;
 };
 
 #endif // POST_H

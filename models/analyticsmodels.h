@@ -57,17 +57,25 @@ struct DateTrend
 };
 
 /*
- * Analytics 页面统一筛选条件。
+ * Analytics / Export 页面统一筛选条件。
  *
  * platform 为空：全部平台。
  * startDate 无效：不限制开始日期。
  * endDate 无效：不限制结束日期。
+ *
+ * 数据隔离字段：
+ * - includeAllUsers = true：管理员查看全部数据；
+ * - includeAllUsers = false：普通用户只查看 ownerUserId 对应的数据；
+ * - ownerUserId：当前普通用户 ID。
  */
 struct AnalyticsFilter
 {
     QString platform;
     QDate startDate;
     QDate endDate;
+
+    int ownerUserId = -1;
+    bool includeAllUsers = true;
 };
 
 /*
