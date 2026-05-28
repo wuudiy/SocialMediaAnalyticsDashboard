@@ -21,30 +21,55 @@ set(PROJECT_SOURCES
 
     controllers/authcontroller.h
     controllers/authcontroller.cpp
+    controllers/postcontroller.h
+    controllers/postcontroller.cpp
+    controllers/usercontroller.h
+    controllers/usercontroller.cpp
+    controllers/exportcontroller.h
+    controllers/exportcontroller.cpp
 
     models/user.h
     models/user.cpp
     models/post.h
     models/post.cpp
+    models/operationlog.h
+    models/analyticsmodels.h
+    models/dashboardmodels.h
+    models/ExportModels.h
 
-    services/appstyle.h
-    services/appstyle.cpp
-    services/databasemanager.h
-    services/databasemanager.cpp
-    services/desutil.h
-    services/desutil.cpp
-    services/sha256util.h
-    services/sha256util.cpp
-    services/userrepository.h
-    services/userrepository.cpp
-    services/postrepository.h
-    services/postrepository.cpp
+    repositories/userrepository.h
+    repositories/userrepository.cpp
+    repositories/postrepository.h
+    repositories/postrepository.cpp
+
+    infrastructure/databasemanager.h
+    infrastructure/databasemanager.cpp
+
+    utils/desutil.h
+    utils/desutil.cpp
+    utils/sha256util.h
+    utils/sha256util.cpp
+    utils/platformconstants.h
+
+    styles/appstyle.h
+    styles/appstyle.cpp
+
     services/analyticsservice.h
     services/analyticsservice.cpp
     services/dashboardvisualizationservice.h
     services/dashboardvisualizationservice.cpp
     services/logservice.h
     services/logservice.cpp
+    services/postservice.h
+    services/postservice.cpp
+    services/csvimportservice.h
+    services/csvimportservice.cpp
+    services/userservice.h
+    services/userservice.cpp
+    services/settingsservice.h
+    services/settingsservice.cpp
+    services/exportservice.h
+    services/exportservice.cpp
 
     views/dashboardpage.h
     views/dashboardpage.cpp
@@ -99,8 +124,12 @@ target_include_directories(${PROJECT_NAME}
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/controllers
     ${CMAKE_CURRENT_SOURCE_DIR}/models
+    ${CMAKE_CURRENT_SOURCE_DIR}/repositories
     ${CMAKE_CURRENT_SOURCE_DIR}/services
     ${CMAKE_CURRENT_SOURCE_DIR}/views
+    ${CMAKE_CURRENT_SOURCE_DIR}/infrastructure
+    ${CMAKE_CURRENT_SOURCE_DIR}/utils
+    ${CMAKE_CURRENT_SOURCE_DIR}/styles
 )
 
 if(QT_VERSION_MAJOR EQUAL 6)

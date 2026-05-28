@@ -2,7 +2,7 @@
 #define AUTHCONTROLLER_H
 
 #include "../models/user.h"
-#include "../services/userrepository.h"
+#include "../repositories/userrepository.h"
 #include "../services/logservice.h"
 
 #include <QString>

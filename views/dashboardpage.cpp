@@ -1,8 +1,8 @@
 #include "dashboardpage.h"
 #include "ui_dashboardpage.h"
 
-#include "../services/appstyle.h"
-#include "../services/databasemanager.h"
+#include "../styles/appstyle.h"
+#include "../infrastructure/databasemanager.h"
 
 #include <QDebug>
 #include <QSqlError>

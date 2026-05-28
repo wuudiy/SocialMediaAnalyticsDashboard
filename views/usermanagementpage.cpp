@@ -1,8 +1,8 @@
 #include "usermanagementpage.h"
 #include "ui_usermanagementpage.h"
 
-#include "../services/appstyle.h"
-#include "../services/sha256util.h"
+#include "../controllers/usercontroller.h"
+#include "../styles/appstyle.h"
 
 #include <QAbstractItemView>
 #include <QComboBox>
@@ -16,14 +16,22 @@
 
 UserManagementPage::UserManagementPage(QWidget *parent)
     : QWidget(parent),
-    ui(new Ui::UserManagementPage)
+    ui(new Ui::UserManagementPage),
+    userController(nullptr)
 {
     ui->setupUi(this);
 
     prepareUiObjects();
     connectSignals();
     applyStyleSheet();
-    updateAccessState();
+
+    /*
+     * 当前批次为了减少 MainWindow 改动，Controller 先由页面内部创建。
+     * 后续如果继续做依赖注入，可以把 Controller 改成由 MainWindowController 创建。
+     */
+    userController = new UserController(this, this);
+
+    showAccessState(false);
 }
 
 UserManagementPage::~UserManagementPage()
@@ -31,16 +39,19 @@ UserManagementPage::~UserManagementPage()
     delete ui;
 }
 
-// 接收当前登录用户，并立即刷新页面权限。
+// 接收当前登录用户，并交给 Controller 判断权限和刷新用户列表。
 void UserManagementPage::setCurrentUser(const User& user)
 {
-    currentUser = user;
-    updateAccessState();
+    if (userController) {
+        userController->setCurrentUser(user);
+    }
 }
 
 /*
  * 初始化 .ui 中已有控件的运行时属性。
- * 固定结构放在 .ui 文件中，这里只设置样式名、输入提示和表格行为。
+ *
+ * 固定结构放在 .ui 文件中，
+ * 这里只设置样式名、输入提示和表格行为。
  */
 void UserManagementPage::prepareUiObjects()
 {
@@ -71,7 +82,10 @@ void UserManagementPage::prepareUiObjects()
     ui->passwordLineEdit->setPlaceholderText(QStringLiteral("At least 6 characters"));
     ui->passwordLineEdit->setEchoMode(QLineEdit::Password);
 
-    // 下拉框显示文本和真实业务值分开，避免用界面文本参与逻辑判断。
+    /*
+     * 下拉框显示文本和真实业务值分开，
+     * 避免用界面文本参与逻辑判断。
+     */
     ui->roleComboBox->clear();
     ui->roleComboBox->addItem(QStringLiteral("User"), QStringLiteral("user"));
     ui->roleComboBox->addItem(QStringLiteral("Admin"), QStringLiteral("admin"));
@@ -100,11 +114,8 @@ void UserManagementPage::prepareUiObjects()
 
     // 隐藏左侧行号列，让表格在默认窗口下更紧凑。
     ui->userTable->verticalHeader()->setVisible(false);
-    ui->userTable->verticalHeader()->setDefaultSectionSize(36);
-
-    ui->userTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
-    ui->userTable->verticalHeader()->setVisible(false);
     ui->userTable->verticalHeader()->setDefaultSectionSize(34);
+
     ui->userTable->setSelectionBehavior(QAbstractItemView::SelectRows);
     ui->userTable->setSelectionMode(QAbstractItemView::SingleSelection);
     ui->userTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -139,80 +150,91 @@ void UserManagementPage::applyStyleSheet()
     setStyleSheet(AppStyle::dataManagementPageStyle());
 }
 
-// 创建用户仍然复用 AuthController 中已有注册逻辑。
+void UserManagementPage::showAccessState(bool allowed)
+{
+    setFormEnabled(allowed);
+    setUserListEnabled(allowed);
+
+    if (allowed) {
+        ui->pageSubtitleLabel->setText(
+            QStringLiteral("Create accounts, view users, disable accounts, enable accounts, and reset passwords.")
+            );
+        return;
+    }
+
+    ui->pageSubtitleLabel->setText(
+        QStringLiteral("Only admin users can manage accounts.")
+        );
+
+    ui->userTable->clearContents();
+    ui->userTable->setRowCount(0);
+}
+
+void UserManagementPage::showUsers(const QList<User>& users)
+{
+    fillUserTable(users);
+}
+
+void UserManagementPage::fillUserTable(const QList<User>& users)
+{
+    ui->userTable->setSortingEnabled(false);
+    ui->userTable->clearContents();
+    ui->userTable->setRowCount(users.size());
+
+    for (int row = 0; row < users.size(); ++row) {
+        const User& user = users.at(row);
+
+        QTableWidgetItem *idItem = new QTableWidgetItem(QString::number(user.userId));
+        idItem->setData(Qt::UserRole, user.userId);
+        idItem->setTextAlignment(Qt::AlignCenter);
+
+        QTableWidgetItem *usernameItem = new QTableWidgetItem(user.username);
+        usernameItem->setData(Qt::UserRole, user.userId);
+
+        QTableWidgetItem *roleItem = new QTableWidgetItem(user.role);
+        roleItem->setData(Qt::UserRole, user.userId);
+        roleItem->setTextAlignment(Qt::AlignCenter);
+
+        QTableWidgetItem *statusItem = new QTableWidgetItem(user.status);
+        statusItem->setData(Qt::UserRole, user.userId);
+        statusItem->setTextAlignment(Qt::AlignCenter);
+
+        ui->userTable->setItem(row, 0, idItem);
+        ui->userTable->setItem(row, 1, usernameItem);
+        ui->userTable->setItem(row, 2, roleItem);
+        ui->userTable->setItem(row, 3, statusItem);
+    }
+
+    ui->userTable->setSortingEnabled(true);
+    ui->userTable->resizeRowsToContents();
+}
+
 void UserManagementPage::onCreateUserClicked()
 {
-    if (!canManageUsers()) {
-        setMessage(QStringLiteral("You do not have permission to create users."), true);
-
-        QMessageBox::warning(
-            this,
-            QStringLiteral("Access Denied"),
-            QStringLiteral("Only admin users can create users.")
-            );
-
-        return;
-    }
-
-    QString message;
-
-    const bool success = authController.registerUser(
-        currentUser,
+    /*
+     * View 只收集输入，然后发给 Controller。
+     *
+     * 权限判断、输入校验、密码哈希、数据库写入、日志记录
+     * 都不再写在 View 中。
+     */
+    emit createUserRequested(
         ui->usernameLineEdit->text(),
         ui->passwordLineEdit->text(),
-        selectedRole(),
-        message
+        selectedRole()
         );
-
-    setMessage(message, !success);
-
-    if (!success) {
-        QMessageBox::warning(
-            this,
-            QStringLiteral("Create User Failed"),
-            message
-            );
-
-        return;
-    }
-
-    QMessageBox::information(
-        this,
-        QStringLiteral("Create User Success"),
-        message
-        );
-
-    resetForm();
-    refreshUserTable();
 }
 
 void UserManagementPage::onRefreshUsersClicked()
 {
-    if (!canManageUsers()) {
-        setMessage(QStringLiteral("You do not have permission to view users."), true);
-        return;
-    }
-
-    refreshUserTable();
-    setMessage(QStringLiteral("User list refreshed."));
+    emit refreshUsersRequested();
 }
 
 void UserManagementPage::onEnableUserClicked()
 {
-    if (!canManageUsers()) {
-        setMessage(QStringLiteral("You do not have permission to enable users."), true);
-        return;
-    }
-
     const User targetUser = selectedUserFromTable();
 
     if (!targetUser.isValid()) {
-        setMessage(QStringLiteral("Please select a user first."), true);
-        return;
-    }
-
-    if (targetUser.isActive()) {
-        setMessage(QStringLiteral("The selected user is already active."), true);
+        showMessage(QStringLiteral("Please select a user first."), true);
         return;
     }
 
@@ -228,76 +250,15 @@ void UserManagementPage::onEnableUserClicked()
         return;
     }
 
-    const bool success = userRepository.updateStatusByUserId(
-        targetUser.userId,
-        QStringLiteral("active")
-        );
-
-    writeUserManagementLog(
-        QStringLiteral("enable_user"),
-        targetUser,
-        QStringLiteral("Enable user"),
-        success
-        );
-
-    if (!success) {
-        setMessage(QStringLiteral("Failed to enable user. Please check the database."), true);
-
-        QMessageBox::warning(
-            this,
-            QStringLiteral("Enable User Failed"),
-            QStringLiteral("Failed to enable user.")
-            );
-
-        return;
-    }
-
-    setMessage(QStringLiteral("User enabled successfully."));
-    refreshUserTable();
+    emit enableUserRequested(targetUser);
 }
 
 void UserManagementPage::onDisableUserClicked()
 {
-    if (!canManageUsers()) {
-        setMessage(QStringLiteral("You do not have permission to disable users."), true);
-        return;
-    }
-
     const User targetUser = selectedUserFromTable();
 
     if (!targetUser.isValid()) {
-        setMessage(QStringLiteral("Please select a user first."), true);
-        return;
-    }
-
-    if (!targetUser.isActive()) {
-        setMessage(QStringLiteral("The selected user is already disabled."), true);
-        return;
-    }
-
-    // 禁止禁用当前登录用户，避免管理员把自己踢出系统。
-    if (targetUser.userId == currentUser.userId) {
-        setMessage(QStringLiteral("You cannot disable the currently logged-in user."), true);
-
-        QMessageBox::warning(
-            this,
-            QStringLiteral("Operation Not Allowed"),
-            QStringLiteral("You cannot disable the currently logged-in user.")
-            );
-
-        return;
-    }
-
-    // 系统至少保留一个 active admin。
-    if (targetUser.isAdmin() && userRepository.countActiveAdmins() <= 1) {
-        setMessage(QStringLiteral("You cannot disable the last active admin."), true);
-
-        QMessageBox::warning(
-            this,
-            QStringLiteral("Operation Not Allowed"),
-            QStringLiteral("You cannot disable the last active admin.")
-            );
-
+        showMessage(QStringLiteral("Please select a user first."), true);
         return;
     }
 
@@ -313,45 +274,15 @@ void UserManagementPage::onDisableUserClicked()
         return;
     }
 
-    const bool success = userRepository.updateStatusByUserId(
-        targetUser.userId,
-        QStringLiteral("disabled")
-        );
-
-    writeUserManagementLog(
-        QStringLiteral("disable_user"),
-        targetUser,
-        QStringLiteral("Disable user"),
-        success
-        );
-
-    if (!success) {
-        setMessage(QStringLiteral("Failed to disable user. Please check the database."), true);
-
-        QMessageBox::warning(
-            this,
-            QStringLiteral("Disable User Failed"),
-            QStringLiteral("Failed to disable user.")
-            );
-
-        return;
-    }
-
-    setMessage(QStringLiteral("User disabled successfully."));
-    refreshUserTable();
+    emit disableUserRequested(targetUser);
 }
 
 void UserManagementPage::onResetPasswordClicked()
 {
-    if (!canManageUsers()) {
-        setMessage(QStringLiteral("You do not have permission to reset passwords."), true);
-        return;
-    }
-
     const User targetUser = selectedUserFromTable();
 
     if (!targetUser.isValid()) {
-        setMessage(QStringLiteral("Please select a user first."), true);
+        showMessage(QStringLiteral("Please select a user first."), true);
         return;
     }
 
@@ -367,42 +298,7 @@ void UserManagementPage::onResetPasswordClicked()
         return;
     }
 
-    // 重置密码仍然写入 SHA-256 哈希，不保存明文。
-    const QString defaultPasswordHash = SHA256Util::hashPassword(QStringLiteral("123456"));
-
-    const bool success = userRepository.updatePasswordByUserId(
-        targetUser.userId,
-        defaultPasswordHash
-        );
-
-    writeUserManagementLog(
-        QStringLiteral("reset_password"),
-        targetUser,
-        QStringLiteral("Reset password to default value"),
-        success
-        );
-
-    if (!success) {
-        setMessage(QStringLiteral("Failed to reset password. Please check the database."), true);
-
-        QMessageBox::warning(
-            this,
-            QStringLiteral("Reset Password Failed"),
-            QStringLiteral("Failed to reset password.")
-            );
-
-        return;
-    }
-
-    setMessage(QStringLiteral("Password reset successfully. Default password: 123456"));
-
-    QMessageBox::information(
-        this,
-        QStringLiteral("Reset Password Success"),
-        QStringLiteral("Password has been reset to 123456.")
-        );
-
-    refreshUserTable();
+    emit resetPasswordRequested(targetUser);
 }
 
 // 清空表单。角色默认恢复为 User，避免误创建管理员账号。
@@ -432,82 +328,6 @@ void UserManagementPage::setUserListEnabled(bool enabled)
     ui->enableUserButton->setEnabled(enabled);
     ui->disableUserButton->setEnabled(enabled);
     ui->resetPasswordButton->setEnabled(enabled);
-}
-
-// 根据当前用户角色刷新页面权限。
-void UserManagementPage::updateAccessState()
-{
-    const bool allowed = canManageUsers();
-
-    setFormEnabled(allowed);
-    setUserListEnabled(allowed);
-
-    if (allowed) {
-        ui->pageSubtitleLabel->setText(
-            QStringLiteral("Create accounts, view users, disable accounts, enable accounts, and reset passwords.")
-            );
-
-        setMessage(QString());
-        refreshUserTable();
-        return;
-    }
-
-    ui->pageSubtitleLabel->setText(
-        QStringLiteral("Only admin users can manage accounts.")
-        );
-
-    setMessage(QStringLiteral("You do not have permission to manage users."), true);
-
-    ui->userTable->clearContents();
-    ui->userTable->setRowCount(0);
-}
-
-// 刷新用户列表。userId 存入 Qt::UserRole，后续操作直接按 ID 更新。
-void UserManagementPage::refreshUserTable()
-{
-    if (!canManageUsers()) {
-        ui->userTable->clearContents();
-        ui->userTable->setRowCount(0);
-        return;
-    }
-
-    const QList<User> users = userRepository.findAllUsers();
-
-    ui->userTable->setSortingEnabled(false);
-    ui->userTable->clearContents();
-    ui->userTable->setRowCount(users.size());
-
-    for (int row = 0; row < users.size(); ++row) {
-        const User& user = users.at(row);
-
-        QTableWidgetItem *idItem = new QTableWidgetItem(QString::number(user.userId));
-        idItem->setData(Qt::UserRole, user.userId);
-
-        QTableWidgetItem *usernameItem = new QTableWidgetItem(user.username);
-        usernameItem->setData(Qt::UserRole, user.userId);
-
-        QTableWidgetItem *roleItem = new QTableWidgetItem(user.role);
-        roleItem->setData(Qt::UserRole, user.userId);
-
-        QTableWidgetItem *statusItem = new QTableWidgetItem(user.status);
-        statusItem->setData(Qt::UserRole, user.userId);
-
-        ui->userTable->setItem(row, 0, idItem);
-        ui->userTable->setItem(row, 1, usernameItem);
-        ui->userTable->setItem(row, 2, roleItem);
-        ui->userTable->setItem(row, 3, statusItem);
-    }
-
-    ui->userTable->setSortingEnabled(true);
-    ui->userTable->resizeRowsToContents();
-}
-
-// 当前用户必须是 active admin 才能管理用户。
-bool UserManagementPage::canManageUsers() const
-{
-    return currentUser.isValid()
-    && currentUser.isActive()
-        && currentUser.isAdmin();
 }
 
 // 从下拉框读取真实角色值。
@@ -545,35 +365,51 @@ User UserManagementPage::selectedUserFromTable() const
 }
 
 // 页面提示统一从这里设置。
-void UserManagementPage::setMessage(const QString& message,
-                                    bool error)
+void UserManagementPage::showMessage(const QString& message,
+                                     bool error)
 {
     ui->messageLabel->setText(message);
     ui->messageLabel->setStyleSheet(AppStyle::messageLabelStyle(error));
 }
 
-// 用户管理操作写入日志，方便管理员在 Operation Logs 页面审计。
-void UserManagementPage::writeUserManagementLog(const QString& action,
-                                                const User& targetUser,
-                                                const QString& detail,
-                                                bool success)
+void UserManagementPage::showWarningMessage(const QString& title,
+                                            const QString& message)
 {
-    const QString operatorUsername = currentUser.username.trimmed().isEmpty()
-    ? QStringLiteral("unknown")
-    : currentUser.username.trimmed();
+    QMessageBox::warning(this, title, message);
+}
 
-    const QString logDetail = QStringLiteral("%1. Target user_id: %2, username: %3, role: %4, status: %5")
-                                  .arg(detail)
-                                  .arg(targetUser.userId)
-                                  .arg(targetUser.username)
-                                  .arg(targetUser.role)
-                                  .arg(targetUser.status);
+void UserManagementPage::handleCreateUserSuccess(const QString& message)
+{
+    showMessage(message);
 
-    logService.writeLog(
-        currentUser.userId,
-        operatorUsername,
-        action,
-        logDetail,
-        success ? QStringLiteral("success") : QStringLiteral("failed")
+    QMessageBox::information(
+        this,
+        QStringLiteral("Create User Success"),
+        message
+        );
+
+    resetForm();
+}
+
+void UserManagementPage::handleEnableUserSuccess(const QString& message)
+{
+    showMessage(message);
+}
+
+void UserManagementPage::handleDisableUserSuccess(const QString& message)
+{
+    showMessage(message);
+}
+
+void UserManagementPage::handleResetPasswordSuccess(const QString& message,
+                                                    const QString& defaultPassword)
+{
+    showMessage(message);
+
+    QMessageBox::information(
+        this,
+        QStringLiteral("Reset Password Success"),
+        QStringLiteral("Password has been reset to %1.")
+            .arg(defaultPassword)
         );
 }

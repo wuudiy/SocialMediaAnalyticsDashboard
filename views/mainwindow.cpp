@@ -1,7 +1,7 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 
-#include "../services/appstyle.h"
+#include "../styles/appstyle.h"
 
 #include "analyticspage.h"
 #include "dashboardpage.h"

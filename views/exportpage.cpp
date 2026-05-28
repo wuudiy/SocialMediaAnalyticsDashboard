@@ -1,292 +1,163 @@
 #include "exportpage.h"
 #include "ui_ExportPage.h"
 
-#include "../services/analyticsservice.h"
-#include "../services/logservice.h"
+#include "../controllers/exportcontroller.h"
+#include "../styles/appstyle.h"
+#include "../utils/platformconstants.h"
 
-#include <QCoreApplication>
 #include <QDate>
-#include <QDir>
 #include <QFileDialog>
 #include <QMessageBox>
-#include <QSettings>
-#include <QTextStream>
+#include <QPushButton>
+#include <QTextEdit>
 
 ExportPage::ExportPage(QWidget *parent)
     : QWidget(parent),
-      ui(new Ui::ExportPage),
-      analyticsService(new AnalyticsService()),
-      logService(new LogService())
+    ui(new Ui::ExportPage),
+    exportController(nullptr)
 {
     ui->setupUi(this);
-    setupComboBox();
 
-    connect(ui->exportCsvButton, &QPushButton::clicked, this, &ExportPage::onExportCsvClicked);
-    connect(ui->exportTxtButton, &QPushButton::clicked, this, &ExportPage::onExportTxtClicked);
+    prepareUiObjects();
+    setupComboBox();
+    connectSignals();
+
+    /*
+     * 当前批次为了减少 MainWindow 改动，Controller 先由页面内部创建。
+     * 后续重构 MainWindowController 时，可以再改成统一注入。
+     */
+    exportController = new ExportController(this, this);
 }
 
 ExportPage::~ExportPage()
 {
-    delete logService;
-    delete analyticsService;
     delete ui;
-}
-
-void ExportPage::setupComboBox()
-{
-    ui->platformComboBox->addItem(tr("All Platforms"), QString());
-    ui->platformComboBox->addItem(tr("Weibo"), QStringLiteral("Weibo"));
-    ui->platformComboBox->addItem(tr("Douyin"), QStringLiteral("Douyin"));
-    ui->platformComboBox->addItem(tr("Bilibili"), QStringLiteral("Bilibili"));
-    ui->platformComboBox->addItem(tr("Xiaohongshu"), QStringLiteral("Xiaohongshu"));
-    ui->platformComboBox->addItem(tr("WeChat"), QStringLiteral("WeChat"));
-
-    ui->startDateEdit->setDate(QDate::currentDate().addDays(-30));
-    ui->endDateEdit->setDate(QDate::currentDate());
-}
-
-QString ExportPage::generateTxtReport()
-{
-    QString platform = ui->platformComboBox->currentData().toString();
-    QDate startDate = ui->startDateEdit->date();
-    QDate endDate = ui->endDateEdit->date();
-
-    QString report;
-    QTextStream stream(&report);
-
-    stream << "========================================\n";
-    stream << "    Social Media Analytics Report\n";
-    stream << "========================================\n";
-    stream << "\n";
-
-    stream << "Report Generated: " << QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss") << "\n";
-    stream << "\n";
-
-    stream << "Data Range:\n";
-    stream << "  Start Date: " << startDate.toString("yyyy-MM-dd") << "\n";
-    stream << "  End Date:   " << endDate.toString("yyyy-MM-dd") << "\n";
-    stream << "  Platform:   " << (platform.isEmpty() ? "All Platforms" : platform) << "\n";
-    stream << "\n";
-
-    stream << "========================================\n";
-    stream << "Summary Statistics\n";
-    stream << "========================================\n";
-
-    DashboardSummary summary = analyticsService->loadDashboardSummary();
-    stream << "  Total Posts:        " << summary.totalPosts << "\n";
-    stream << "  Total Interactions: " << summary.totalInteractions << "\n";
-    stream << "  Total Views:        " << summary.totalViews << "\n";
-    stream << "  Avg Engagement Rate: " << QString("%1%").arg(summary.averageEngagementRate * 100, 0, 'f', 2) << "\n";
-    stream << "\n";
-
-    stream << "========================================\n";
-    stream << "Platform Statistics\n";
-    stream << "========================================\n";
-
-    QList<PlatformStatistics> platformStats = analyticsService->getPlatformStatistics(platform);
-    for (const PlatformStatistics& stats : platformStats) {
-        stream << "\n";
-        stream << "Platform: " << stats.platform << "\n";
-        stream << "  Post Count:        " << stats.postCount << "\n";
-        stream << "  Total Likes:       " << stats.totalLikes << "\n";
-        stream << "  Total Comments:    " << stats.totalComments << "\n";
-        stream << "  Total Shares:      " << stats.totalShares << "\n";
-        stream << "  Total Views:       " << stats.totalViews << "\n";
-        stream << "  Engagement Rate:   " << QString("%1%").arg(stats.averageEngagementRate * 100, 0, 'f', 2) << "\n";
-    }
-    stream << "\n";
-
-    stream << "========================================\n";
-    stream << "Top Posts by Interactions\n";
-    stream << "========================================\n";
-
-    QList<Post> topPosts = analyticsService->getTopPosts(5);
-    int rank = 1;
-    for (const Post& post : topPosts) {
-        stream << "\n";
-        stream << rank << ". " << post.platform << " - " << post.accountName << "\n";
-        stream << "   Content:      " << post.content.left(60) << (post.content.size() > 60 ? "..." : "") << "\n";
-        stream << "   Interactions: " << post.interactionCount() << "\n";
-        stream << "   Views:        " << post.views << "\n";
-        stream << "   Engagement:   " << QString("%1%").arg(post.engagementRate() * 100, 0, 'f', 2) << "\n";
-        rank++;
-    }
-    stream << "\n";
-
-    stream << "========================================\n";
-    stream << "End of Report\n";
-    stream << "========================================\n";
-
-    return report;
-}
-
-QString ExportPage::generateCsvReport()
-{
-    QString platform = ui->platformComboBox->currentData().toString();
-    QDate startDate = ui->startDateEdit->date();
-    QDate endDate = ui->endDateEdit->date();
-
-    QString csv;
-    QTextStream stream(&csv);
-
-    stream << "Social Media Analytics Report\n";
-    stream << "\n";
-
-    stream << "Report Generated," << QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss") << "\n";
-    stream << "\n";
-
-    stream << "Data Range\n";
-    stream << "Start Date," << startDate.toString("yyyy-MM-dd") << "\n";
-    stream << "End Date," << endDate.toString("yyyy-MM-dd") << "\n";
-    stream << "Platform," << (platform.isEmpty() ? "All Platforms" : platform) << "\n";
-    stream << "\n";
-
-    stream << "Summary Statistics\n";
-    stream << "Metric,Value\n";
-
-    DashboardSummary summary = analyticsService->loadDashboardSummary();
-    stream << "Total Posts," << summary.totalPosts << "\n";
-    stream << "Total Interactions," << summary.totalInteractions << "\n";
-    stream << "Total Views," << summary.totalViews << "\n";
-    stream << "Avg Engagement Rate," << QString("%1").arg(summary.averageEngagementRate * 100, 0, 'f', 2) << "%\n";
-    stream << "\n";
-
-    stream << "Platform Statistics\n";
-    stream << "Platform,Post Count,Total Likes,Total Comments,Total Shares,Total Views,Engagement Rate\n";
-
-    QList<PlatformStatistics> platformStats = analyticsService->getPlatformStatistics(platform);
-    for (const PlatformStatistics& stats : platformStats) {
-        stream << stats.platform << ","
-               << stats.postCount << ","
-               << stats.totalLikes << ","
-               << stats.totalComments << ","
-               << stats.totalShares << ","
-               << stats.totalViews << ","
-               << QString("%1").arg(stats.averageEngagementRate * 100, 0, 'f', 2) << "%\n";
-    }
-    stream << "\n";
-
-    stream << "Top Posts by Interactions\n";
-    stream << "Rank,Platform,Account,Content,Interactions,Views,Engagement Rate\n";
-
-    QList<Post> topPosts = analyticsService->getTopPosts(5);
-    int rank = 1;
-    for (const Post& post : topPosts) {
-        QString content = post.content;
-        content.replace("\"", "\"\"");
-        if (content.contains(",")) {
-            content = "\"" + content + "\"";
-        }
-
-        stream << rank << ","
-               << post.platform << ","
-               << post.accountName << ","
-               << content.left(100) << ","
-               << post.interactionCount() << ","
-               << post.views << ","
-               << QString("%1").arg(post.engagementRate() * 100, 0, 'f', 2) << "%\n";
-        rank++;
-    }
-
-    return csv;
-}
-
-bool ExportPage::exportToFile(const QString& content, const QString& fileName, const QString& extension, QString& outFilePath)
-{
-    QString defaultFileName = QString("%1_%2.%3")
-            .arg(fileName)
-            .arg(QDate::currentDate().toString("yyyyMMdd"))
-            .arg(extension);
-
-    QSettings settings(QStringLiteral("SocialMediaAnalytics"), QStringLiteral("Settings"));
-    QString defaultDir = settings.value(QStringLiteral("exportDirectory"), QString()).toString();
-
-    QString initialPath = defaultDir.isEmpty() ? defaultFileName : QDir(defaultDir).filePath(defaultFileName);
-
-    QString filePath = QFileDialog::getSaveFileName(
-                this,
-                tr("Export Report"),
-                initialPath,
-                tr("%1 Files (*.%2)").arg(extension.toUpper()).arg(extension)
-                );
-
-    if (filePath.isEmpty()) {
-        return false;
-    }
-
-    QFile file(filePath);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        QMessageBox::warning(this, tr("Export Failed"), tr("Failed to open file for writing"));
-        return false;
-    }
-
-    QTextStream out(&file);
-    out << content;
-    file.close();
-
-    outFilePath = filePath;
-    return true;
-}
-
-void ExportPage::showStatus(const QString& message, bool success)
-{
-    ui->statusLabel->setText(message);
-    ui->statusLabel->setStyleSheet(success ? "color: green;" : "color: red;");
-}
-
-void ExportPage::onExportCsvClicked()
-{
-    QString csvContent = generateCsvReport();
-    QString filePath;
-
-    ui->previewTextEdit->setText(csvContent);
-
-    if (exportToFile(csvContent, "social_media_report", "csv", filePath)) {
-        showStatus(tr("CSV report exported successfully!"), true);
-        logExportAction("CSV", filePath, true);
-    } else {
-        showStatus(tr("Export cancelled or failed."), false);
-        logExportAction("CSV", QString(), false);
-    }
-}
-
-void ExportPage::onExportTxtClicked()
-{
-    QString txtContent = generateTxtReport();
-    QString filePath;
-
-    ui->previewTextEdit->setText(txtContent);
-
-    if (exportToFile(txtContent, "social_media_report", "txt", filePath)) {
-        showStatus(tr("TXT report exported successfully!"), true);
-        logExportAction("TXT", filePath, true);
-    } else {
-        showStatus(tr("Export cancelled or failed."), false);
-        logExportAction("TXT", QString(), false);
-    }
 }
 
 void ExportPage::setCurrentUser(const User& user)
 {
-    currentUser = user;
+    if (exportController) {
+        exportController->setCurrentUser(user);
+    }
 }
 
-void ExportPage::logExportAction(const QString& format, const QString& filePath, bool success)
+/*
+ * 初始化 .ui 中控件的运行时属性。
+ *
+ * .ui 负责布局；
+ * cpp 负责运行时状态、样式名和默认值。
+ */
+void ExportPage::prepareUiObjects()
 {
-    QString platform = ui->platformComboBox->currentData().toString();
-    QDate startDate = ui->startDateEdit->date();
-    QDate endDate = ui->endDateEdit->date();
+    setObjectName(QStringLiteral("exportPage"));
 
-    QString detail = QString("Format: %1, Platform: %2, Date Range: %3 to %4, File: %5")
-            .arg(format)
-            .arg(platform.isEmpty() ? "All" : platform)
-            .arg(startDate.toString("yyyy-MM-dd"))
-            .arg(endDate.toString("yyyy-MM-dd"))
-            .arg(filePath);
+    ui->exportCsvButton->setObjectName(QStringLiteral("primaryButton"));
+    ui->exportTxtButton->setObjectName(QStringLiteral("secondaryButton"));
 
-    if (currentUser.isValid()) {
-        logService->writeLog(currentUser.userId, currentUser.username, "Export Report", detail, success ? "success" : "failed");
-    } else {
-        logService->writeSystemLog("Export Report", detail, success ? "success" : "failed");
+    ui->exportCsvButton->setCursor(Qt::PointingHandCursor);
+    ui->exportTxtButton->setCursor(Qt::PointingHandCursor);
+
+    ui->previewTextEdit->setReadOnly(true);
+    ui->previewTextEdit->setPlaceholderText(
+        QStringLiteral("The generated report preview will appear here.")
+        );
+
+    ui->statusLabel->setText(QString());
+    ui->statusLabel->setWordWrap(true);
+
+    /*
+     * 复用现有数据管理页面样式。
+     * ExportPage 的 .ui 里本身也有部分内联样式，本批次暂不大改 UI。
+     */
+    setStyleSheet(AppStyle::dataManagementPageStyle());
+}
+
+void ExportPage::setupComboBox()
+{
+    ui->platformComboBox->clear();
+
+    /*
+     * 下拉框显示值和实际查询值分开：
+     * - 显示 “All Platforms”
+     * - 实际 data 为空字符串，表示不按平台过滤。
+     */
+    ui->platformComboBox->addItem(QStringLiteral("All Platforms"), QString());
+
+    for (const QString& platform : PlatformConstants::availablePlatforms()) {
+        ui->platformComboBox->addItem(platform, platform);
     }
+
+    ui->startDateEdit->setDate(QDate::currentDate().addDays(-30));
+    ui->endDateEdit->setDate(QDate::currentDate());
+
+    ui->startDateEdit->setCalendarPopup(true);
+    ui->endDateEdit->setCalendarPopup(true);
+}
+
+void ExportPage::connectSignals()
+{
+    connect(ui->exportCsvButton, &QPushButton::clicked,
+            this, &ExportPage::onExportCsvClicked);
+
+    connect(ui->exportTxtButton, &QPushButton::clicked,
+            this, &ExportPage::onExportTxtClicked);
+}
+
+void ExportPage::onExportCsvClicked()
+{
+    emit exportReportRequested(readExportRequest(ExportFormat::Csv));
+}
+
+void ExportPage::onExportTxtClicked()
+{
+    emit exportReportRequested(readExportRequest(ExportFormat::Txt));
+}
+
+ExportRequest ExportPage::readExportRequest(ExportFormat format) const
+{
+    ExportRequest request;
+
+    request.format = format;
+    request.baseFileName = QStringLiteral("social_media_report");
+    request.filter.platform = ui->platformComboBox->currentData().toString();
+    request.filter.startDate = ui->startDateEdit->date();
+    request.filter.endDate = ui->endDateEdit->date();
+
+    return request;
+}
+
+void ExportPage::showPreview(const QString& content)
+{
+    ui->previewTextEdit->setPlainText(content);
+}
+
+void ExportPage::showStatus(const QString& message,
+                            bool success)
+{
+    ui->statusLabel->setText(message);
+
+    /*
+     * AppStyle::messageLabelStyle(true) 表示错误样式，
+     * 所以这里传入 !success。
+     */
+    ui->statusLabel->setStyleSheet(AppStyle::messageLabelStyle(!success));
+}
+
+void ExportPage::showWarningMessage(const QString& title,
+                                    const QString& message)
+{
+    QMessageBox::warning(this, title, message);
+}
+
+QString ExportPage::selectExportFilePath(const QString& suggestedPath,
+                                         const QString& extension)
+{
+    return QFileDialog::getSaveFileName(
+        this,
+        QStringLiteral("Export Report"),
+        suggestedPath,
+        QStringLiteral("%1 Files (*.%2)")
+            .arg(extension.toUpper())
+            .arg(extension)
+        );
 }

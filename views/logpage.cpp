@@ -1,7 +1,7 @@
 #include "logpage.h"
 #include "ui_logpage.h"
 
-#include "../services/appstyle.h"
+#include "../styles/appstyle.h"
 
 #include <QAbstractItemView>
 #include <QCheckBox>

@@ -1,6 +1,6 @@
 #include "authcontroller.h"
-#include "../services/desutil.h"
-#include "../services/sha256util.h"
+#include "../utils/desutil.h"
+#include "../utils/sha256util.h"
 
 #include <QDebug>
 

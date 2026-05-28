@@ -3,12 +3,9 @@
 
 #include "../models/post.h"
 #include "../models/user.h"
-#include "../services/logservice.h"
-#include "../services/postrepository.h"
 
-#include <QDate>
 #include <QList>
-#include <QStringList>
+#include <QString>
 #include <QWidget>
 
 QT_BEGIN_NAMESPACE
@@ -17,16 +14,23 @@ class PostManagementPage;
 }
 QT_END_NAMESPACE
 
+class PostController;
+
 /*
  * 帖子数据管理页面。
  *
- * 当前版本采用 “postmanagementpage.ui + postmanagementpage.cpp” 分工：
- * - forms/postmanagementpage.ui：只负责固定界面结构和控件摆放；
- * - views/postmanagementpage.cpp：只负责控件初始化、信号槽、数据库操作、CSV 导入和日志记录；
- * - services/AppStyle：统一管理页面 QSS 样式。
+ * MVC 重构后，本类只负责 View 层：
+ * - 初始化 ui 控件；
+ * - 读取表单输入；
+ * - 显示帖子表格；
+ * - 显示提示信息；
+ * - 发出用户操作信号。
  *
- * 这样可以减少本 cpp 中大量 new 控件、new layout、addWidget 代码，
- * 后续继续调整 UI 时，也可以优先在 Qt Designer 中拖控件完成。
+ * 不再负责：
+ * - 直接调用 PostRepository；
+ * - 直接写操作日志；
+ * - 直接解析 CSV；
+ * - 直接处理新增、修改、删除业务。
  */
 class PostManagementPage : public QWidget
 {
@@ -43,6 +47,48 @@ public slots:
     // 主窗口切换到本页面时调用，保证表格显示最新数据。
     void refreshPosts();
 
+    // Controller 调用：显示帖子列表。
+    void showPosts(const QList<Post>& posts);
+
+    // Controller 调用：把一条帖子加载到表单，进入编辑状态。
+    void showPostForEditing(const Post& post);
+
+    // Controller 调用：显示底部提示。
+    void showMessage(const QString& message,
+                     bool error = false);
+
+    // Controller 调用：统一显示警告弹窗。
+    void showWarningMessage(const QString& title,
+                            const QString& message);
+
+    // Controller 调用：新增成功后的页面处理。
+    void handleAddSuccess(const QString& message);
+
+    // Controller 调用：修改成功后的页面处理。
+    void handleUpdateSuccess(const QString& message);
+
+    // Controller 调用：删除成功后的页面处理。
+    void handleDeleteSuccess(int deletedPostId,
+                             const QString& message);
+
+    // Controller 调用：CSV 导入完成后的页面处理。
+    void handleImportFinished(const QString& message,
+                              bool hasFailedRows);
+
+signals:
+    void refreshPostsRequested(const QString& platform,
+                               const QString& keyword);
+
+    void addPostRequested(const Post& post);
+
+    void updatePostRequested(const Post& post);
+
+    void deletePostRequested(int postId);
+
+    void loadPostRequested(int postId);
+
+    void importCsvRequested(const QString& fileName);
+
 private slots:
     void onAddPostClicked();
     void onUpdatePostClicked();
@@ -53,13 +99,6 @@ private slots:
     void onTableCellDoubleClicked(int row, int column);
 
 private:
-    enum class CsvFormat
-    {
-        Unknown,
-        StandardPost,
-        BilibiliTrend
-    };
-
     // 初始化 .ui 中已有控件的运行时属性，例如下拉框数据、按钮样式名、日期默认值。
     void prepareUiObjects();
 
@@ -72,15 +111,11 @@ private:
     // 初始化帖子表格的列名、选择模式和列宽策略。
     void setupTable();
 
-    // 把数据库查询结果填入表格。
+    // 把 Controller 返回的数据填入表格。
     void fillTable(const QList<Post>& posts);
 
     // 从表单控件读取一条帖子数据。
     Post readPostFromForm() const;
-
-    // 校验帖子表单输入是否合法。
-    bool validatePostInput(const Post& post,
-                           QString& message) const;
 
     // 清空表单，并退出编辑状态。
     void resetForm();
@@ -94,38 +129,14 @@ private:
     // 获取当前表格选中的帖子 ID。
     int selectedPostId() const;
 
-    // 设置页面底部提示；error=true 时显示红色错误样式。
-    void setMessage(const QString& message,
-                    bool error = false);
-
-    // 获取当前操作者信息，用于写操作日志。
-    int currentOperatorId() const;
-    QString currentOperatorName() const;
-
-    // 写帖子相关操作日志。
-    void writePostOperationLog(const QString& action,
-                               const QString& detail,
-                               const QString& result = QStringLiteral("success"));
-
-    // CSV 解析相关工具函数。
-    QString cleanCsvField(const QString& value) const;
-    QStringList splitCsvLine(const QString& line) const;
-    QDate parseCsvDate(const QString& value) const;
-
-    CsvFormat detectCsvFormat(const QStringList& fields) const;
-
-    bool buildPostFromCsvFields(const QStringList& fields,
-                                CsvFormat format,
-                                Post& post,
-                                QString& message) const;
+    QString currentSearchPlatform() const;
+    QString currentSearchKeyword() const;
 
 private:
     Ui::PostManagementPage *ui;
 
     User currentUser;
-
-    PostRepository postRepository;
-    LogService logService;
+    PostController *postController;
 
     // -1 表示当前不是编辑状态；大于 0 表示正在编辑某条帖子。
     int editingPostId;
