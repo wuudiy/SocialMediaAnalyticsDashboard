@@ -87,6 +87,8 @@ set(PROJECT_SOURCES
     services/dashboardservice.cpp
     services/authservice.h
     services/authservice.cpp
+    services/reportgenerator.h
+    services/reportgenerator.cpp
 
     views/dashboardpage.h
     views/dashboardpage.cpp

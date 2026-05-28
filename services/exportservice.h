@@ -9,15 +9,18 @@
 /*
  * 报表导出服务。
  *
- * 负责：
- * - 根据筛选条件生成 TXT 报表；
- * - 根据筛选条件生成 CSV 报表；
- * - 写入本地文件。
+ * 重构后，ExportService 不再直接拼接 CSV / TXT 内容。
  *
- * 数据隔离说明：
- * ExportService 不直接判断 admin / user。
- * Controller 会把当前用户权限写入 ExportRequest::filter，
- * ExportService 只按 filter 生成报表。
+ * 职责变为：
+ * - 校验导出请求；
+ * - 根据 ExportFormat 选择对应 ReportGenerator；
+ * - 调用多态接口生成报表；
+ * - 将报表写入本地文件。
+ *
+ * 这样继承体系真正解决了代码复用和扩展问题：
+ * - TXT / CSV 的公共统计数据加载逻辑放在 AnalyticsReportGenerator；
+ * - TXT / CSV 的格式化逻辑放在各自子类；
+ * - ExportService 只依赖 ReportGenerator 抽象接口。
  */
 class ExportService
 {
@@ -35,15 +38,6 @@ public:
     static QString extensionForFormat(ExportFormat format);
 
     static QString displayNameForFormat(ExportFormat format);
-
-private:
-    QString generateTxtReport(const ExportRequest& request);
-
-    QString generateCsvReport(const ExportRequest& request);
-
-    QString csvEscape(const QString& value) const;
-
-    QString displayPlatform(const QString& platform) const;
 
 private:
     AnalyticsService analyticsService;
