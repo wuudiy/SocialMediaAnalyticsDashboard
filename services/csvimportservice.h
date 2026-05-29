@@ -6,6 +6,7 @@
 #include "../models/post.h"
 #include "../models/user.h"
 
+#include <QByteArray>
 #include <QDate>
 #include <QString>
 #include <QStringList>
@@ -78,11 +79,22 @@ private:
     {
         Unknown,
         StandardPost,
-        BilibiliTrend
+        BilibiliTrend,
+        DouyinWorkList
     };
 
 private:
+    bool readCsvTextFile(const QString& fileName,
+                         QString& content,
+                         QString& message) const;
+
+    bool looksLikeExcelWorkbook(const QByteArray& bytes) const;
+
+    QString decodeCsvBytes(const QByteArray& bytes) const;
+
     QString cleanCsvField(const QString& value) const;
+
+    QStringList splitCsvRows(const QString& content) const;
 
     QStringList splitCsvLine(const QString& line) const;
 

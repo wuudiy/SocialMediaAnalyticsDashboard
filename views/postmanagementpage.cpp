@@ -357,7 +357,7 @@ void PostManagementPage::onImportCsvClicked()
         this,
         QStringLiteral("Import CSV"),
         QString(),
-        QStringLiteral("CSV Files (*.csv);;All Files (*.*)")
+        QStringLiteral("CSV Text Files (*.csv *.CSV);;All Files (*.*)")
         );
 
     if (fileName.isEmpty()) {
