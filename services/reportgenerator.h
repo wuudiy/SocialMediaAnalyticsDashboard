@@ -1,7 +1,7 @@
 #ifndef REPORTGENERATOR_H
 #define REPORTGENERATOR_H
 
-#include "../models/exportmodels.h"
+#include "../models/ExportModels.h"
 #include "../models/post.h"
 #include "analyticsservice.h"
 
@@ -13,44 +13,39 @@
 /*
  * 报表生成器抽象基类。
  *
- * 这是本项目自定义继承体系的顶层抽象类。
+ * 负责：
+ * - 定义所有报表生成器的统一接口；
+ * - 让 ExportService 只依赖抽象的 ReportGenerator；
+ * - 通过多态支持 CSV、TXT、HTML 等不同导出格式。
  *
- * 设计目的：
- * - 统一 CSV / TXT 等不同报表格式的生成入口；
- * - 让 ExportService 只依赖抽象类 ReportGenerator；
- * - 后续新增 PDF / HTML / Excel 报表时，只需要新增子类。
- *
- * 体现：
- * - 类型抽象；
- * - 运行时多态；
- * - public inheritance。
+ * 不负责：
+ * - 查询统计数据；
+ * - 拼接某一种具体格式的报表内容；
+ * - 写入本地文件。
  */
 class ReportGenerator
 {
 public:
     virtual ~ReportGenerator() = default;
 
-    // 当前生成器支持的导出格式。
+    // 返回当前生成器对应的导出格式。
     virtual ExportFormat format() const = 0;
 
-    // 根据导出请求生成报表内容。
-    virtual QString generate(const ExportRequest& request) = 0;
+    // 根据导出请求生成报表文件数据和预览内容。
+    virtual GeneratedReport generate(const ExportRequest& request) = 0;
 };
 
 /*
- * 分析报表生成器中间基类。
+ * 分析类报表生成器中间基类。
  *
- * 继承关系：
- * AnalyticsReportGenerator -> ReportGenerator
+ * 负责：
+ * - 统一加载 DashboardSummary、PlatformStatistics、DateTrend、TopPosts；
+ * - 提供平台、范围、百分比、数字和短文本等公共格式化方法；
+ * - 提供文本和 HTML 两类 GeneratedReport 封装方法。
  *
- * 设计目的：
- * - 复用 AnalyticsService 数据加载逻辑；
- * - 复用平台显示、权限范围显示、百分比格式化等公共逻辑；
- * - 避免 CSV / TXT 报表重复查询 summary / platformStats / topPosts。
- *
- * 这是 multilevel inheritance 的中间层：
- * TxtReportGenerator -> AnalyticsReportGenerator -> ReportGenerator
- * CsvReportGenerator -> AnalyticsReportGenerator -> ReportGenerator
+ * 继承意义：
+ * - TXT、CSV、HTML、 都是分析类报表；
+ * - 它们共享数据加载逻辑，但各自负责不同格式的输出。
  */
 class AnalyticsReportGenerator : public ReportGenerator
 {
@@ -62,13 +57,13 @@ protected:
     /*
      * 报表生成所需的公共数据。
      *
-     * TXT 和 CSV 都需要这些数据，
-     * 所以统一由父类加载，子类只负责格式化输出。
+     * 子类只需要调用 loadReportData()，不用重复访问 AnalyticsService。
      */
     struct ReportData
     {
         DashboardSummary summary;
         QList<PlatformStatistics> platformStats;
+        QList<DateTrend> dateTrends;
         QList<Post> topPosts;
     };
 
@@ -76,13 +71,16 @@ protected:
                               int topPostLimit = 5) const;
 
     QString displayPlatform(const QString& platform) const;
-
     QString scopeText(const AnalyticsFilter& filter) const;
-
+    QString dateText(const QDate& date) const;
+    QString dateRangeText(const AnalyticsFilter& filter) const;
     QString percentText(double rate) const;
-
+    QString numberText(qint64 value) const;
     QString shortText(const QString& text,
                       int maxLength) const;
+
+    GeneratedReport makePlainTextReport(const QString& content) const;
+    GeneratedReport makeHtmlReport(const QString& html) const;
 
 protected:
     AnalyticsService *analyticsService;
@@ -91,15 +89,8 @@ protected:
 /*
  * CSV 转义工具基类。
  *
- * 设计目的：
- * - CSV 字符串转义是可复用能力；
- * - 但它不是一种完整的报表生成器；
- * - 所以 CsvReportGenerator 使用 protected inheritance 复用它。
- *
- * 体现：
- * - multiple inheritance；
- * - protected inheritance mode；
- * - 实现复用但不暴露给外部。
+ * CsvReportGenerator 使用 protected 继承复用该工具，
+ * 这样 csvEscape() 不会暴露为对外公共接口。
  */
 class CsvEscaper
 {
@@ -114,13 +105,7 @@ protected:
  * TXT 报表生成器。
  *
  * 继承关系：
- * TxtReportGenerator -> AnalyticsReportGenerator -> ReportGenerator
- *
- * 体现：
- * - single inheritance；
- * - multilevel inheritance；
- * - 重写虚函数 generate()；
- * - 多态生成 TXT 报表。
+ * TxtReportGenerator -> AnalyticsReportGenerator -> ReportGenerator。
  */
 class TxtReportGenerator : public AnalyticsReportGenerator
 {
@@ -128,24 +113,16 @@ public:
     explicit TxtReportGenerator(AnalyticsService *analyticsService);
 
     ExportFormat format() const override;
-
-    QString generate(const ExportRequest& request) override;
+    GeneratedReport generate(const ExportRequest& request) override;
 };
 
 /*
  * CSV 报表生成器。
  *
  * 继承关系：
- * CsvReportGenerator -> AnalyticsReportGenerator -> ReportGenerator
+ * CsvReportGenerator -> AnalyticsReportGenerator -> ReportGenerator。
  *
- * 同时：
- * CsvReportGenerator protected 继承 CsvEscaper。
- *
- * 体现：
- * - multiple inheritance；
- * - protected inheritance；
- * - 多态生成 CSV 报表；
- * - 复用 CsvEscaper::csvEscape()。
+ * 同时 protected 继承 CsvEscaper，用于复用 CSV 字段转义逻辑。
  */
 class CsvReportGenerator : public AnalyticsReportGenerator,
                            protected CsvEscaper
@@ -154,15 +131,14 @@ public:
     explicit CsvReportGenerator(AnalyticsService *analyticsService);
 
     ExportFormat format() const override;
-
-    QString generate(const ExportRequest& request) override;
+    GeneratedReport generate(const ExportRequest& request) override;
 };
 
 /*
  * 报表生成器工厂。
  *
- * ExportService 不需要知道具体生成器怎么创建，
- * 只需要根据 ExportFormat 拿到 ReportGenerator 抽象指针。
+ * ExportService 通过该工厂获得 ReportGenerator 抽象指针，
+ * 不需要直接依赖具体生成器类。
  */
 class ReportGeneratorFactory
 {

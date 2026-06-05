@@ -80,7 +80,9 @@ private:
         Unknown,
         StandardPost,
         BilibiliTrend,
-        DouyinWorkList
+        DouyinWorkList,
+        XiaohongshuNoteList,
+        WechatArticleDetail
     };
 
 private:
@@ -97,6 +99,12 @@ private:
     QStringList splitCsvRows(const QString& content) const;
 
     QStringList splitCsvLine(const QString& line) const;
+
+    bool looksLikeWechatArticleDetailRows(const QStringList& rows) const;
+
+    bool buildPostFromWechatArticleDetailRows(const QStringList& rows,
+                                              Post& post,
+                                              QString& message) const;
 
     QDate parseCsvDate(const QString& value) const;
 

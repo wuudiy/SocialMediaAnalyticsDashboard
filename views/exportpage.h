@@ -26,7 +26,7 @@ class ExportController;
  * - 显示导出状态。
  *
  * 不再负责：
- * - 生成 TXT / CSV 报表；
+ * - 生成 TXT / CSV / HTML 报表；
  * - 写本地文件；
  * - 读取 QSettings；
  * - 写操作日志。
@@ -42,7 +42,8 @@ public:
     void setCurrentUser(const User& user);
 
 public slots:
-    void showPreview(const QString& content);
+    void showPreview(const QString& content,
+                     ExportPreviewType previewType);
 
     void showStatus(const QString& message,
                     bool success);
@@ -59,6 +60,7 @@ signals:
 private slots:
     void onExportCsvClicked();
     void onExportTxtClicked();
+    void onExportHtmlClicked();
 
 private:
     void prepareUiObjects();

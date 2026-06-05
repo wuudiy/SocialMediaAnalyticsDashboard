@@ -35,9 +35,54 @@ CsvImportResult CsvImportService::importFromFile(const User& currentUser,
 
     result.fileOpened = true;
 
-    int lineNumber = 0;
     CsvFormat csvFormat = CsvFormat::Unknown;
     const QStringList rows = splitCsvRows(csvContent);
+
+    /*
+     * 微信公众号“数据明细”CSV 是单篇文章多段报表：
+     * - 第 1 行是文章标题；
+     * - “数据概况”区域是核心指标；
+     * - “阅读数据趋势明细”区域是每日趋势。
+     *
+     * 它不是普通的一行一条帖子，所以必须先整体识别、整体解析。
+     */
+    if (looksLikeWechatArticleDetailRows(rows)) {
+        Post post;
+        QString message;
+
+        if (!buildPostFromWechatArticleDetailRows(rows, post, message)) {
+            result.failedCount = 1;
+
+            result.errorDetails.append(
+                QStringLiteral("Line 1: %1")
+                    .arg(message.isEmpty()
+                             ? QStringLiteral("Invalid WeChat article detail CSV.")
+                             : message)
+                );
+
+            return result;
+        }
+
+        const PostOperationResult saveResult = postService.addPost(currentUser, post);
+
+        if (!saveResult.success) {
+            result.failedCount = 1;
+
+            result.errorDetails.append(
+                QStringLiteral("Line 1: %1")
+                    .arg(saveResult.message.isEmpty()
+                             ? QStringLiteral("Insert database failed.")
+                             : saveResult.message)
+                );
+
+            return result;
+        }
+
+        result.successCount = 1;
+        return result;
+    }
+
+    int lineNumber = 0;
 
     for (const QString& row : rows) {
         const QString line = row.trimmed();
@@ -48,11 +93,11 @@ CsvImportResult CsvImportService::importFromFile(const User& currentUser,
         }
 
         const QStringList fields = splitCsvLine(line);
+        const QString firstField = cleanCsvField(fields.value(0));
 
         /*
-         * 第一行优先尝试识别表头：
-         * - 如果识别到通用帖子 CSV、Bilibili 趋势 CSV 或抖音作品列表 CSV，则跳过表头；
-         * - 如果没有识别到表头，则把第一行当作通用帖子数据处理。
+         * 平台导出的 CSV 前面可能有说明行，不一定第一行就是表头。
+         * 例如小红书导出的文件第一行是说明行，第二行才是真正表头。
          */
         if (csvFormat == CsvFormat::Unknown) {
             csvFormat = detectCsvFormat(fields);
@@ -61,19 +106,25 @@ CsvImportResult CsvImportService::importFromFile(const User& currentUser,
                 continue;
             }
 
+            if (firstField.contains(QStringLiteral("最多导出"))
+                || (firstField.contains(QStringLiteral("导出"))
+                    && firstField.contains(QStringLiteral("笔记")))) {
+                continue;
+            }
+
             csvFormat = CsvFormat::StandardPost;
         }
 
         /*
-         * 平台导出的文件中可能有“累计 / 合计”汇总行。
+         * 平台导出的文件中可能有“累计 / 合计 / 总计”汇总行。
          * 这类行不是单条作品数据，不能作为帖子导入。
          */
-        const QString firstField = cleanCsvField(fields.value(0));
-
         if ((csvFormat == CsvFormat::BilibiliTrend
-             || csvFormat == CsvFormat::DouyinWorkList)
+             || csvFormat == CsvFormat::DouyinWorkList
+             || csvFormat == CsvFormat::XiaohongshuNoteList)
             && (firstField == QStringLiteral("累计")
-                || firstField == QStringLiteral("合计"))) {
+                || firstField == QStringLiteral("合计")
+                || firstField == QStringLiteral("总计"))) {
             continue;
         }
 
@@ -384,6 +435,157 @@ QStringList CsvImportService::splitCsvLine(const QString& line) const
     return fields;
 }
 
+bool CsvImportService::looksLikeWechatArticleDetailRows(const QStringList& rows) const
+{
+    bool hasDataOverview = false;
+    bool hasMetricHeader = false;
+    bool hasReadMetric = false;
+    bool hasTrendDetail = false;
+
+    for (const QString& row : rows) {
+        const QStringList fields = splitCsvLine(row.trimmed());
+
+        QStringList cleanedFields;
+
+        for (const QString& field : fields) {
+            cleanedFields.append(cleanCsvField(field));
+        }
+
+        const QString joinedRow = cleanedFields.join(QStringLiteral(","));
+
+        if (joinedRow.contains(QStringLiteral("数据概况"))) {
+            hasDataOverview = true;
+        }
+
+        if (joinedRow.contains(QStringLiteral("数据指标"))
+            && joinedRow.contains(QStringLiteral("数值"))) {
+            hasMetricHeader = true;
+        }
+
+        if (joinedRow.contains(QStringLiteral("阅读(人)"))
+            || joinedRow.contains(QStringLiteral("阅读（人）"))) {
+            hasReadMetric = true;
+        }
+
+        if (joinedRow.contains(QStringLiteral("阅读数据趋势明细"))) {
+            hasTrendDetail = true;
+        }
+    }
+
+    /*
+     * “阅读数据趋势明细”不是强制条件。
+     * 有些微信导出的单篇报表可能只包含数据概况。
+     */
+    Q_UNUSED(hasTrendDetail);
+
+    return hasDataOverview && hasMetricHeader && hasReadMetric;
+}
+
+bool CsvImportService::buildPostFromWechatArticleDetailRows(const QStringList& rows,
+                                                            Post& post,
+                                                            QString& message) const
+{
+    QString articleTitle;
+
+    /*
+     * 当前微信 CSV 第一行通常是：
+     * ,文章标题,,,
+     */
+    if (!rows.isEmpty()) {
+        const QStringList firstRowFields = splitCsvLine(rows.first().trimmed());
+
+        for (const QString& field : firstRowFields) {
+            const QString cleanedField = cleanCsvField(field);
+
+            if (!cleanedField.isEmpty()) {
+                articleTitle = cleanedField;
+                break;
+            }
+        }
+    }
+
+    if (articleTitle.isEmpty()) {
+        articleTitle = QStringLiteral("WeChat article");
+    }
+
+    /*
+     * 微信数据概况区是纵向键值结构：
+     * ,阅读(人),57,,
+     * ,点赞(人),1,,
+     * ,评论（条）,3,,
+     */
+    auto findMetricValue = [&](const QStringList& metricNames) -> QString {
+        for (const QString& row : rows) {
+            const QStringList fields = splitCsvLine(row.trimmed());
+
+            for (int i = 0; i + 1 < fields.size(); ++i) {
+                const QString metricName = cleanCsvField(fields.value(i));
+
+                if (metricNames.contains(metricName)) {
+                    return cleanCsvField(fields.value(i + 1));
+                }
+            }
+        }
+
+        return QString();
+    };
+
+    /*
+     * 微信单篇数据 CSV 没有明确给出“发布时间”。
+     * 这里从“阅读数据趋势明细”里的日期列取最早日期作为 publishDate。
+     */
+    QDate publishDate;
+
+    for (const QString& row : rows) {
+        const QStringList fields = splitCsvLine(row.trimmed());
+
+        for (const QString& field : fields) {
+            const QDate date = parseCsvDate(field);
+
+            if (date.isValid()
+                && (!publishDate.isValid() || date < publishDate)) {
+                publishDate = date;
+            }
+        }
+    }
+
+    if (!publishDate.isValid()) {
+        publishDate = QDate::currentDate();
+    }
+
+    post.platform = QStringLiteral("WeChat");
+    post.accountName = QStringLiteral("WeChat Official Account");
+    post.content = articleTitle;
+    post.publishDate = publishDate;
+
+    post.views = csvNumber(
+        findMetricValue(QStringList()
+                        << QStringLiteral("阅读(人)")
+                        << QStringLiteral("阅读（人）"))
+        );
+
+    post.likes = csvNumber(
+        findMetricValue(QStringList()
+                        << QStringLiteral("点赞(人)")
+                        << QStringLiteral("点赞（人）"))
+        );
+
+    post.comments = csvNumber(
+        findMetricValue(QStringList()
+                        << QStringLiteral("评论（条）")
+                        << QStringLiteral("评论(条)")
+                        << QStringLiteral("评论"))
+        );
+
+    post.shares = csvNumber(
+        findMetricValue(QStringList()
+                        << QStringLiteral("分享(人)")
+                        << QStringLiteral("分享（人）"))
+        );
+
+    return postService.validatePost(post, message);
+}
+
 QDate CsvImportService::parseCsvDate(const QString& value) const
 {
     QString dateText = cleanCsvField(value);
@@ -399,7 +601,11 @@ QDate CsvImportService::parseCsvDate(const QString& value) const
         QStringLiteral("yyyy/M/d H:m:s"),
         QStringLiteral("yyyy/M/d H:m"),
         QStringLiteral("yyyy年M月d日 H:m:s"),
-        QStringLiteral("yyyy年M月d日 H:m")
+        QStringLiteral("yyyy年M月d日 H:m"),
+        QStringLiteral("yyyy年M月d日 H时m分s秒"),
+        QStringLiteral("yyyy年M月d日 H时m分"),
+        QStringLiteral("yyyy年M月d日H时m分s秒"),
+        QStringLiteral("yyyy年M月d日H时m分")
     };
 
     for (const QString& format : dateTimeFormats) {
@@ -454,6 +660,20 @@ CsvImportService::CsvFormat CsvImportService::detectCsvFormat(const QStringList&
     }
 
     const QString joinedHeader = headers.join(QStringLiteral(","));
+
+    /*
+     * 小红书笔记列表明细表 CSV。
+     * 常见表头：
+     * 笔记标题,首次发布时间,体裁,曝光,观看量,封面点击率,点赞,评论,收藏,涨粉,分享,...
+     */
+    if (headers.contains(QStringLiteral("笔记标题"))
+        && headers.contains(QStringLiteral("首次发布时间"))
+        && headers.contains(QStringLiteral("观看量"))
+        && headers.contains(QStringLiteral("点赞"))
+        && headers.contains(QStringLiteral("评论"))
+        && headers.contains(QStringLiteral("分享"))) {
+        return CsvFormat::XiaohongshuNoteList;
+    }
 
     /*
      * 抖音作品列表 CSV。
@@ -547,6 +767,44 @@ bool CsvImportService::buildPostFromCsvFields(const QStringList& fields,
         post.likes = csvNumber(fields.value(10));
         post.shares = csvNumber(fields.value(11));
         post.comments = csvNumber(fields.value(12));
+
+        return postService.validatePost(post, message);
+    }
+    if (format == CsvFormat::XiaohongshuNoteList) {
+        if (fields.size() < 11) {
+            message = QStringLiteral("Xiaohongshu note list CSV row must contain at least 11 fields.");
+            return false;
+        }
+
+        /*
+         * 小红书笔记列表明细表字段顺序：
+         * 0 笔记标题
+         * 1 首次发布时间
+         * 2 体裁
+         * 3 曝光
+         * 4 观看量
+         * 5 封面点击率
+         * 6 点赞
+         * 7 评论
+         * 8 收藏
+         * 9 涨粉
+         * 10 分享
+         *
+         * 当前 Post 模型没有曝光、收藏、涨粉、点击率、观看时长等字段，
+         * 所以只导入通用统计字段。views 优先使用“观看量”，
+         * 如果观看量为空或为 0，再用“曝光”兜底。
+         */
+        const int watchCount = csvNumber(fields.value(4));
+        const int exposureCount = csvNumber(fields.value(3));
+
+        post.platform = QStringLiteral("Xiaohongshu");
+        post.accountName = QStringLiteral("Xiaohongshu Account");
+        post.content = cleanCsvField(fields.value(0));
+        post.publishDate = parseCsvDate(fields.value(1));
+        post.views = watchCount > 0 ? watchCount : exposureCount;
+        post.likes = csvNumber(fields.value(6));
+        post.comments = csvNumber(fields.value(7));
+        post.shares = csvNumber(fields.value(10));
 
         return postService.validatePost(post, message);
     }

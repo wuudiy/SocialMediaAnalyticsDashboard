@@ -1,6 +1,9 @@
 #include "reportgenerator.h"
 
+#include "htmlreportgenerator.h"
+
 #include <QDateTime>
+#include <QLocale>
 #include <QTextStream>
 
 AnalyticsReportGenerator::AnalyticsReportGenerator(AnalyticsService *analyticsService)
@@ -19,15 +22,14 @@ AnalyticsReportGenerator::loadReportData(const ExportRequest& request,
     }
 
     /*
-     * 公共数据加载逻辑集中在父类。
+     * 所有导出格式使用同一份统计数据。
      *
-     * 这样 TXT / CSV 子类都不用重复写：
-     * - loadDashboardSummary()
-     * - getPlatformStatistics()
-     * - getTopPosts()
+     * 这样新增 HTML 时不用重复写查询逻辑，
+     * 只需要在子类中处理展示格式。
      */
     data.summary = analyticsService->loadDashboardSummary(request.filter);
     data.platformStats = analyticsService->getPlatformStatistics(request.filter);
+    data.dateTrends = analyticsService->getDateTrends(request.filter);
     data.topPosts = analyticsService->getTopPosts(topPostLimit, request.filter);
 
     return data;
@@ -47,9 +49,27 @@ QString AnalyticsReportGenerator::scopeText(const AnalyticsFilter& filter) const
                : QStringLiteral("Current User Only");
 }
 
+QString AnalyticsReportGenerator::dateText(const QDate& date) const
+{
+    return date.isValid()
+    ? date.toString(QStringLiteral("yyyy-MM-dd"))
+    : QStringLiteral("N/A");
+}
+
+QString AnalyticsReportGenerator::dateRangeText(const AnalyticsFilter& filter) const
+{
+    return QStringLiteral("%1 to %2")
+    .arg(dateText(filter.startDate), dateText(filter.endDate));
+}
+
 QString AnalyticsReportGenerator::percentText(double rate) const
 {
     return QStringLiteral("%1%").arg(rate * 100.0, 0, 'f', 2);
+}
+
+QString AnalyticsReportGenerator::numberText(qint64 value) const
+{
+    return QLocale(QLocale::English, QLocale::UnitedStates).toString(value);
 }
 
 QString AnalyticsReportGenerator::shortText(const QString& text,
@@ -62,6 +82,28 @@ QString AnalyticsReportGenerator::shortText(const QString& text,
     }
 
     return cleaned.left(maxLength - 3) + QStringLiteral("...");
+}
+
+GeneratedReport AnalyticsReportGenerator::makePlainTextReport(const QString& content) const
+{
+    GeneratedReport report;
+
+    report.fileData = content.toUtf8();
+    report.previewContent = content;
+    report.previewType = ExportPreviewType::PlainText;
+
+    return report;
+}
+
+GeneratedReport AnalyticsReportGenerator::makeHtmlReport(const QString& html) const
+{
+    GeneratedReport report;
+
+    report.fileData = html.toUtf8();
+    report.previewContent = html;
+    report.previewType = ExportPreviewType::Html;
+
+    return report;
 }
 
 QString CsvEscaper::csvEscape(const QString& value) const
@@ -89,7 +131,7 @@ ExportFormat TxtReportGenerator::format() const
     return ExportFormat::Txt;
 }
 
-QString TxtReportGenerator::generate(const ExportRequest& request)
+GeneratedReport TxtReportGenerator::generate(const ExportRequest& request)
 {
     QString report;
     QTextStream stream(&report);
@@ -106,35 +148,39 @@ QString TxtReportGenerator::generate(const ExportRequest& request)
            << "\n\n";
 
     stream << "Data Range:\n";
-    stream << "  Start Date: " << filter.startDate.toString(QStringLiteral("yyyy-MM-dd")) << "\n";
-    stream << "  End Date:   " << filter.endDate.toString(QStringLiteral("yyyy-MM-dd")) << "\n";
+    stream << "  Start Date: " << dateText(filter.startDate) << "\n";
+    stream << "  End Date:   " << dateText(filter.endDate) << "\n";
     stream << "  Platform:   " << displayPlatform(filter.platform) << "\n";
     stream << "  Scope:      " << scopeText(filter) << "\n\n";
 
     stream << "========================================\n";
     stream << "Summary Statistics\n";
     stream << "========================================\n";
-    stream << "  Total Posts:         " << data.summary.totalPosts << "\n";
-    stream << "  Total Likes:         " << data.summary.totalLikes << "\n";
-    stream << "  Total Comments:      " << data.summary.totalComments << "\n";
-    stream << "  Total Shares:        " << data.summary.totalShares << "\n";
-    stream << "  Total Interactions:  " << data.summary.totalInteractions << "\n";
-    stream << "  Total Views:         " << data.summary.totalViews << "\n";
+    stream << "  Total Posts:         " << numberText(data.summary.totalPosts) << "\n";
+    stream << "  Total Likes:         " << numberText(data.summary.totalLikes) << "\n";
+    stream << "  Total Comments:      " << numberText(data.summary.totalComments) << "\n";
+    stream << "  Total Shares:        " << numberText(data.summary.totalShares) << "\n";
+    stream << "  Total Interactions:  " << numberText(data.summary.totalInteractions) << "\n";
+    stream << "  Total Views:         " << numberText(data.summary.totalViews) << "\n";
     stream << "  Avg Engagement Rate: " << percentText(data.summary.averageEngagementRate) << "\n\n";
 
     stream << "========================================\n";
     stream << "Platform Statistics\n";
     stream << "========================================\n";
 
+    if (data.platformStats.isEmpty()) {
+        stream << "No platform statistics available.\n";
+    }
+
     for (const PlatformStatistics& stats : data.platformStats) {
         stream << "\n";
         stream << "Platform: " << stats.platform << "\n";
-        stream << "  Post Count:        " << stats.postCount << "\n";
-        stream << "  Total Likes:       " << stats.totalLikes << "\n";
-        stream << "  Total Comments:    " << stats.totalComments << "\n";
-        stream << "  Total Shares:      " << stats.totalShares << "\n";
-        stream << "  Total Views:       " << stats.totalViews << "\n";
-        stream << "  Total Interaction: " << stats.totalInteractions << "\n";
+        stream << "  Post Count:        " << numberText(stats.postCount) << "\n";
+        stream << "  Total Likes:       " << numberText(stats.totalLikes) << "\n";
+        stream << "  Total Comments:    " << numberText(stats.totalComments) << "\n";
+        stream << "  Total Shares:      " << numberText(stats.totalShares) << "\n";
+        stream << "  Total Views:       " << numberText(stats.totalViews) << "\n";
+        stream << "  Total Interaction: " << numberText(stats.totalInteractions) << "\n";
         stream << "  Engagement Rate:   " << percentText(stats.averageEngagementRate) << "\n";
     }
 
@@ -143,6 +189,10 @@ QString TxtReportGenerator::generate(const ExportRequest& request)
     stream << "Top Posts by Interactions\n";
     stream << "========================================\n";
 
+    if (data.topPosts.isEmpty()) {
+        stream << "No post data available.\n";
+    }
+
     int rank = 1;
 
     for (const Post& post : data.topPosts) {
@@ -150,8 +200,8 @@ QString TxtReportGenerator::generate(const ExportRequest& request)
         stream << rank << ". " << post.platform << " - " << post.accountName << "\n";
         stream << "   Content:      " << shortText(post.content, 60) << "\n";
         stream << "   Date:         " << post.publishDate.toString(QStringLiteral("yyyy-MM-dd")) << "\n";
-        stream << "   Interactions: " << post.interactionCount() << "\n";
-        stream << "   Views:        " << post.views << "\n";
+        stream << "   Interactions: " << numberText(post.interactionCount()) << "\n";
+        stream << "   Views:        " << numberText(post.views) << "\n";
         stream << "   Engagement:   " << percentText(post.engagementRate()) << "\n";
 
         ++rank;
@@ -162,7 +212,7 @@ QString TxtReportGenerator::generate(const ExportRequest& request)
     stream << "End of Report\n";
     stream << "========================================\n";
 
-    return report;
+    return makePlainTextReport(report);
 }
 
 CsvReportGenerator::CsvReportGenerator(AnalyticsService *analyticsService)
@@ -175,7 +225,7 @@ ExportFormat CsvReportGenerator::format() const
     return ExportFormat::Csv;
 }
 
-QString CsvReportGenerator::generate(const ExportRequest& request)
+GeneratedReport CsvReportGenerator::generate(const ExportRequest& request)
 {
     QString csv;
     QTextStream stream(&csv);
@@ -190,8 +240,8 @@ QString CsvReportGenerator::generate(const ExportRequest& request)
            << "\n\n";
 
     stream << "Data Range\n";
-    stream << "Start Date," << csvEscape(filter.startDate.toString(QStringLiteral("yyyy-MM-dd"))) << "\n";
-    stream << "End Date," << csvEscape(filter.endDate.toString(QStringLiteral("yyyy-MM-dd"))) << "\n";
+    stream << "Start Date," << csvEscape(dateText(filter.startDate)) << "\n";
+    stream << "End Date," << csvEscape(dateText(filter.endDate)) << "\n";
     stream << "Platform," << csvEscape(displayPlatform(filter.platform)) << "\n";
     stream << "Scope," << csvEscape(scopeText(filter)) << "\n\n";
 
@@ -240,14 +290,20 @@ QString CsvReportGenerator::generate(const ExportRequest& request)
         ++rank;
     }
 
-    return csv;
+    return makePlainTextReport(csv);
 }
 
-std::unique_ptr<ReportGenerator> ReportGeneratorFactory::create(ExportFormat format,
-                                                                AnalyticsService *analyticsService)
+std::unique_ptr<ReportGenerator> ReportGeneratorFactory::create(
+    ExportFormat format,
+    AnalyticsService *analyticsService)
 {
-    if (format == ExportFormat::Csv) {
+    switch (format) {
+    case ExportFormat::Csv:
         return std::make_unique<CsvReportGenerator>(analyticsService);
+    case ExportFormat::Txt:
+        return std::make_unique<TxtReportGenerator>(analyticsService);
+    case ExportFormat::Html:
+        return std::make_unique<HtmlReportGenerator>(analyticsService);
     }
 
     return std::make_unique<TxtReportGenerator>(analyticsService);

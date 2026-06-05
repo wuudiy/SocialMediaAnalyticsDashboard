@@ -12,7 +12,7 @@ ExportController::ExportController(ExportPage *view,
     /*
      * Controller 接管导出请求。
      *
-     * View 只发出“用户要导出 CSV / TXT”，
+     * View 只发出“用户要导出某种报表格式”，
      * 其余业务全部由 Controller + Service 完成。
      */
     connect(view, &ExportPage::exportReportRequested,
@@ -28,7 +28,7 @@ void ExportController::handleExportReport(const ExportRequest& request)
 {
     /*
      * 数据隔离关键点：
-     * View 传来的 request 只有平台和日期筛选；
+     * View 传来的 request 只有平台、日期和格式筛选；
      * 当前用户权限必须由 Controller 补充，不能让 View 判断。
      */
     ExportRequest permissionRequest = request;
@@ -48,12 +48,15 @@ void ExportController::handleExportReport(const ExportRequest& request)
         return;
     }
 
-    const QString content = exportService.generateReport(permissionRequest);
+    const GeneratedReport report = exportService.generateReport(permissionRequest);
 
     /*
      * 预览先显示出来，即使用户后面取消保存，也能看到当前报表内容。
+     *
+     * TXT / CSV 使用纯文本预览；
+     * HTML / PNG 使用 HTML 预览，其中 PNG 会被包装成 img 标签。
      */
-    view->showPreview(content);
+    view->showPreview(report.previewContent, report.previewType);
 
     const QString extension = ExportService::extensionForFormat(permissionRequest.format);
     const QString suggestedPath = settingsService.defaultExportFilePath(
@@ -78,7 +81,7 @@ void ExportController::handleExportReport(const ExportRequest& request)
     }
 
     const ExportSaveResult saveResult = exportService.saveReportToFile(
-        content,
+        report.fileData,
         filePath
         );
 

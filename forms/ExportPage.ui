@@ -216,6 +216,20 @@
         </item>
 
         <item>
+         <widget class="QPushButton" name="exportHtmlButton">
+          <property name="text">
+           <string>Export HTML</string>
+          </property>
+          <property name="minimumWidth">
+           <number>120</number>
+          </property>
+          <property name="minimumHeight">
+           <number>40</number>
+          </property>
+         </widget>
+        </item>
+
+        <item>
          <spacer name="formatButtonsSpacer">
           <property name="orientation">
            <enum>Qt::Horizontal</enum>

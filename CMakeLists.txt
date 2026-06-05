@@ -89,6 +89,12 @@ set(PROJECT_SOURCES
     services/authservice.cpp
     services/reportgenerator.h
     services/reportgenerator.cpp
+    services/chartimagebuilder.h
+    services/chartimagebuilder.cpp
+    services/htmlreportgenerator.h
+    services/htmlreportgenerator.cpp
+
+
 
     views/dashboardpage.h
     views/dashboardpage.cpp

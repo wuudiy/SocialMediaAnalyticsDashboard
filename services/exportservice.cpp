@@ -3,12 +3,6 @@
 #include "reportgenerator.h"
 
 #include <QFile>
-#include <QTextStream>
-#include <QtGlobal>
-
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-#include <QStringConverter>
-#endif
 
 ExportService::ExportService()
 {
@@ -33,17 +27,18 @@ bool ExportService::validateRequest(const ExportRequest& request,
     return true;
 }
 
-QString ExportService::generateReport(const ExportRequest& request)
+GeneratedReport ExportService::generateReport(const ExportRequest& request)
 {
     /*
      * 使用工厂根据格式创建具体报表生成器。
      *
      * ExportService 只依赖 ReportGenerator 抽象接口，
-     * 不再关心 CSV / TXT 的具体拼接细节。
+     * 不关心 CSV / TXT / HTML 的具体生成细节。
      *
      * 这里体现了多态：
      * - CSV 请求会调用 CsvReportGenerator::generate()
      * - TXT 请求会调用 TxtReportGenerator::generate()
+     * - HTML 请求会调用 HtmlReportGenerator::generate()
      */
     const std::unique_ptr<ReportGenerator> generator =
         ReportGeneratorFactory::create(request.format, &analyticsService);
@@ -51,7 +46,7 @@ QString ExportService::generateReport(const ExportRequest& request)
     return generator->generate(request);
 }
 
-ExportSaveResult ExportService::saveReportToFile(const QString& content,
+ExportSaveResult ExportService::saveReportToFile(const QByteArray& fileData,
                                                  const QString& filePath) const
 {
     ExportSaveResult result;
@@ -65,21 +60,25 @@ ExportSaveResult ExportService::saveReportToFile(const QString& content,
 
     QFile file(filePath);
 
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+    /*
+     * 统一写入 QByteArray。
+     *
+     * TXT / CSV / HTML 都会先转成 UTF-8 字节，
+     * 后续如果扩展二进制导出格式，也可以继续复用这里。
+     */
+    if (!file.open(QIODevice::WriteOnly)) {
         result.success = false;
         result.message = QStringLiteral("Failed to open file for writing.");
         return result;
     }
 
-    QTextStream stream(&file);
+    if (file.write(fileData) != fileData.size()) {
+        result.success = false;
+        result.message = QStringLiteral("Failed to write complete report file.");
+        file.close();
+        return result;
+    }
 
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    stream.setEncoding(QStringConverter::Utf8);
-#else
-    stream.setCodec("UTF-8");
-#endif
-
-    stream << content;
     file.close();
 
     result.success = true;
@@ -89,14 +88,28 @@ ExportSaveResult ExportService::saveReportToFile(const QString& content,
 
 QString ExportService::extensionForFormat(ExportFormat format)
 {
-    return format == ExportFormat::Csv
-               ? QStringLiteral("csv")
-               : QStringLiteral("txt");
+    switch (format) {
+    case ExportFormat::Csv:
+        return QStringLiteral("csv");
+    case ExportFormat::Txt:
+        return QStringLiteral("txt");
+    case ExportFormat::Html:
+        return QStringLiteral("html");
+    }
+
+    return QStringLiteral("txt");
 }
 
 QString ExportService::displayNameForFormat(ExportFormat format)
 {
-    return format == ExportFormat::Csv
-               ? QStringLiteral("CSV")
-               : QStringLiteral("TXT");
+    switch (format) {
+    case ExportFormat::Csv:
+        return QStringLiteral("CSV");
+    case ExportFormat::Txt:
+        return QStringLiteral("TXT");
+    case ExportFormat::Html:
+        return QStringLiteral("HTML");
+    }
+
+    return QStringLiteral("TXT");
 }

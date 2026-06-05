@@ -53,9 +53,11 @@ void ExportPage::prepareUiObjects()
 
     ui->exportCsvButton->setObjectName(QStringLiteral("primaryButton"));
     ui->exportTxtButton->setObjectName(QStringLiteral("secondaryButton"));
+    ui->exportHtmlButton->setObjectName(QStringLiteral("secondaryButton"));
 
     ui->exportCsvButton->setCursor(Qt::PointingHandCursor);
     ui->exportTxtButton->setCursor(Qt::PointingHandCursor);
+    ui->exportHtmlButton->setCursor(Qt::PointingHandCursor);
 
     ui->previewTextEdit->setReadOnly(true);
     ui->previewTextEdit->setPlaceholderText(
@@ -101,6 +103,10 @@ void ExportPage::connectSignals()
 
     connect(ui->exportTxtButton, &QPushButton::clicked,
             this, &ExportPage::onExportTxtClicked);
+
+    connect(ui->exportHtmlButton, &QPushButton::clicked,
+            this, &ExportPage::onExportHtmlClicked);
+
 }
 
 void ExportPage::onExportCsvClicked()
@@ -111,6 +117,11 @@ void ExportPage::onExportCsvClicked()
 void ExportPage::onExportTxtClicked()
 {
     emit exportReportRequested(readExportRequest(ExportFormat::Txt));
+}
+
+void ExportPage::onExportHtmlClicked()
+{
+    emit exportReportRequested(readExportRequest(ExportFormat::Html));
 }
 
 ExportRequest ExportPage::readExportRequest(ExportFormat format) const
@@ -126,8 +137,20 @@ ExportRequest ExportPage::readExportRequest(ExportFormat format) const
     return request;
 }
 
-void ExportPage::showPreview(const QString& content)
+void ExportPage::showPreview(const QString& content,
+                             ExportPreviewType previewType)
 {
+    /*
+     * 预览类型由 Service 返回，View 不再用字符串内容猜测格式。
+     *
+     * - TXT / CSV：纯文本预览；
+     * - HTML：网页预览；
+     */
+    if (previewType == ExportPreviewType::Html) {
+        ui->previewTextEdit->setHtml(content);
+        return;
+    }
+
     ui->previewTextEdit->setPlainText(content);
 }
 
