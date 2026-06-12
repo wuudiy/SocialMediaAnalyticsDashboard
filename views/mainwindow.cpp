@@ -312,6 +312,11 @@ void MainWindow::exitApplication()
     emit logoutRequested();
 }
 
+void MainWindow::requestReturnToLogin()
+{
+    emit returnToLoginRequested();
+}
+
 /*
  * Controller 调用：显示某个页面。
  *
@@ -439,16 +444,16 @@ void MainWindow::showStatusMessage(const QString& message,
 }
 
 /*
- * 退出程序前二次确认，避免误点。
+ * 注销前二次确认，避免误点。
  *
  * 弹窗属于界面交互，保留在 View 层。
  */
-bool MainWindow::confirmExitApplication()
+bool MainWindow::confirmLogout()
 {
     const QMessageBox::StandardButton answer = QMessageBox::question(
         this,
         QStringLiteral("Logout"),
-        QStringLiteral("Do you want to exit the application?")
+        QStringLiteral("Do you want to log out and return to the login screen?")
         );
 
     return answer == QMessageBox::Yes;

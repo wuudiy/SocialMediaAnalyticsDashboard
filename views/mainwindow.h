@@ -83,10 +83,15 @@ public:
     void showStatusMessage(const QString& message,
                            int timeoutMs = 3000);
 
-    /*
-     * Controller 调用：退出前确认。
+     /*
+     * Controller 调用：注销前确认。
      */
-    bool confirmExitApplication();
+    bool confirmLogout();
+
+    /*
+    * Controller 调用：通知 main.cpp 关闭主窗口并回到登录页。
+    */
+    void requestReturnToLogin();
 
 signals:
     void currentUserChanged(const User& user);
@@ -94,6 +99,8 @@ signals:
     void navigationRequested(MainWindowPage page);
 
     void logoutRequested();
+
+    void returnToLoginRequested();
 
 private slots:
     void showDashboardPage();

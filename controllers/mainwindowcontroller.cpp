@@ -2,8 +2,6 @@
 
 #include "../views/mainwindow.h"
 
-#include <QCoreApplication>
-
 MainWindowController::MainWindowController(MainWindow *view,
                                            QObject *parent)
     : QObject(parent),
@@ -75,14 +73,14 @@ void MainWindowController::handleNavigationRequested(MainWindowPage page)
 void MainWindowController::handleLogoutRequested()
 {
     /*
-     * 退出确认弹窗属于 View 交互；
-     * 是否真正退出由 Controller 决定。
+     * 注销确认弹窗属于 View 交互；
+     * 是否回到登录页由 Controller 决定。
      */
-    if (!view->confirmExitApplication()) {
+    if (!view->confirmLogout()) {
         return;
     }
 
-    QCoreApplication::quit();
+    view->requestReturnToLogin();
 }
 
 bool MainWindowController::isAdminUser() const

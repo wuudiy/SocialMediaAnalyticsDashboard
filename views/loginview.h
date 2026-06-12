@@ -32,6 +32,7 @@ class LoginView : public QWidget
 public:
     explicit LoginView(QWidget *parent = nullptr);
     ~LoginView();
+    void prepareForNextLogin();
 
 signals:
     // 登录成功后把当前用户交给 main.cpp。

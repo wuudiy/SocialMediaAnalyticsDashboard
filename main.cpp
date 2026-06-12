@@ -55,14 +55,22 @@ int main(int argc, char *argv[])
 
     LoginView loginView;
 
-    QObject::connect(&loginView, &LoginView::loginSuccess, [](const User &user) {
-        auto *mainWindow = new MainWindow();
-        mainWindow->setAttribute(Qt::WA_DeleteOnClose);
-        mainWindow->setCurrentUser(user);
-        mainWindow->show();
-    });
+    QObject::connect(&loginView, &LoginView::loginSuccess,
+                     [&loginView](const User &user) {
+                         auto *mainWindow = new MainWindow();
+                         mainWindow->setAttribute(Qt::WA_DeleteOnClose);
+                         QObject::connect(mainWindow, &MainWindow::returnToLoginRequested,
+                                          &loginView, [&loginView, mainWindow]() {
+                                              loginView.prepareForNextLogin();
+                                              mainWindow->close();
+                                          });
+
+                         mainWindow->setCurrentUser(user);
+                         mainWindow->show();
+                     });
 
     loginView.show();
+
 
     const int exitCode = app.exec();
 

@@ -32,12 +32,7 @@ This project supports user authentication, role-based permissions, post manageme
 
 ## 3. Technology Stack
 
-|     |     |
-| --- | --- |
-|     |     |
-|     |     |
-|     |     |
-|     |     |
+
 
 ---
 

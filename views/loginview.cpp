@@ -28,6 +28,17 @@ LoginView::~LoginView()
 {
     delete ui;
 }
+void LoginView::prepareForNextLogin()
+{
+    ui->usernameLineEdit->clear();
+    ui->passwordLineEdit->clear();
+    clearMessage();
+
+    show();
+    raise();
+    activateWindow();
+    focusUsername();
+}
 
 // 初始化登录页基础属性，具体布局交给 rebuildLayout。
 void LoginView::setupWindow()
