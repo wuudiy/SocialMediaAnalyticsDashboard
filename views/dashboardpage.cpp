@@ -383,12 +383,18 @@ void DashboardPage::renderDailyTrendChart(const QList<DailyMetric>& metrics)
     axisX->setTitleText(QStringLiteral("Date"));
     axisX->setTickCount(7);
 
-    if (!metrics.isEmpty()) {
-        axisX->setRange(
-            QDateTime(metrics.first().date, QTime(0, 0, 0)),
-            QDateTime(metrics.last().date, QTime(23, 59, 59))
-            );
-    }
+    const QDate startDate = metrics.isEmpty()
+                                ? QDate::currentDate().addDays(-13)
+                                : metrics.first().date;
+
+    const QDate endDate = metrics.isEmpty()
+                              ? QDate::currentDate()
+                              : metrics.last().date;
+
+    axisX->setRange(
+        QDateTime(startDate, QTime(0, 0, 0)),
+        QDateTime(endDate, QTime(23, 59, 59))
+        );
 
     auto *axisY = new QValueAxis();
     axisY->setTitleText(QStringLiteral("Interactions"));

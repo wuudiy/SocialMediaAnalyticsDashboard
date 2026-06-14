@@ -151,6 +151,16 @@ QList<DailyMetric> DashboardVisualizationService::loadDailyMetrics(const User& c
     const QDate startDate = QDate::currentDate().addDays(-(safeDays - 1));
     const QDate endDate = QDate::currentDate();
 
+    // 先补齐最近 N 天，默认值为 0
+    for (int i = 0; i < safeDays; ++i) {
+        DailyMetric metric;
+        metric.date = startDate.addDays(i);
+        metric.postCount = 0;
+        metric.interactions = 0;
+        metric.views = 0;
+        metrics.append(metric);
+    }
+
     QString sql = QStringLiteral(
         "SELECT "
         "publish_date, "
@@ -178,18 +188,21 @@ QList<DailyMetric> DashboardVisualizationService::loadDailyMetrics(const User& c
 
     if (!query.exec()) {
         qDebug() << "Load daily metrics failed:" << query.lastError().text();
-        return metrics;
+        return metrics; // 返回补 0 的 14 天，避免图表轴异常
     }
 
     while (query.next()) {
-        DailyMetric metric;
+        const QDate date = query.value(0).toDate();
+        const int index = static_cast<int>(startDate.daysTo(date));
 
-        metric.date = query.value(0).toDate();
-        metric.postCount = query.value(1).toInt();
-        metric.interactions = query.value(2).toLongLong();
-        metric.views = query.value(3).toLongLong();
+        if (index < 0 || index >= metrics.size()) {
+            continue;
+        }
 
-        metrics.append(metric);
+        metrics[index].date = date;
+        metrics[index].postCount = query.value(1).toInt();
+        metrics[index].interactions = query.value(2).toLongLong();
+        metrics[index].views = query.value(3).toLongLong();
     }
 
     return metrics;
